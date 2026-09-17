@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Text;
 using EnvStation.Abstractions;
@@ -165,6 +165,7 @@ internal static class Program
         };
 
         var problems = 0;
+        var undeclared = 0;
 
         foreach (var (actionId, arguments) in probes)
         {
@@ -174,36 +175,74 @@ internal static class Program
             // 缺前置依赖、PATH 有失效条目、同名命令冲突都属于"成功返回但有问题"。
             // 早先这里只看 result.Success，于是紧紧挨着"缺少 1 项前置依赖"的下方会打印
             // "未发现异常项"（界面侧同源缺陷见 D-44）。
-            var isProblem = ProbeHealth.IsProblem(actionId, result);
-            var mark = !result.Success ? "✗" : isProblem ? "!" : "✓";
+            var assessment = ProbeHealth.Assess(actionId, result);
+            var mark = Mark(assessment.State);
 
             // 数据行不带句末句号：这是表格里的值，不是句子（文案规范第 5 节）。
             Console.WriteLine($"  {mark} {StripAction(actionId),-28} {TrimSentence(OneLine(result.Message))}");
 
-            if (isProblem)
+            if (assessment.State == ProbeState.Problem)
             {
                 problems++;
+
+                // 异常的具体内容由动作那句话本身承担（"其中 4 项异常"、"缺少 1 项前置依赖"），
+                // 这里不再补一行同义的话：一条检测项一行结论，重复只会让人以为有两件事。
+                // 需要落到用户眼前的细节（如写入测试失败的原因）由动作把它写进 message。
+            }
+            else if (assessment.State == ProbeState.Failed)
+            {
+                problems++;
+            }
+            else if (assessment.State == ProbeState.Undeclared)
+            {
+                // 未登记判据绝不能算通过：那会把一个没检查过的项说成检查过了。
+                // 这一条必须解释——动作的 message 里不会提到"我没登记判据"。
+                undeclared++;
+                Console.WriteLine($"      {assessment.Reason}");
             }
         }
 
         Console.WriteLine();
-        Console.WriteLine(problems == 0
+        var summary = problems == 0
             ? $"未发现异常项（共 {probes.Length} 项）。"
-            : $"共 {probes.Length} 项，其中 {problems} 项异常。");
+            : $"共 {probes.Length} 项，其中 {problems} 项异常。";
+
+        if (undeclared > 0)
+        {
+            summary += $"另有 {undeclared} 项未登记判据，无法判断是否正常。";
+        }
+
+        Console.WriteLine(summary);
 
         return ExitOk;
     }
+
+    /// <summary>检测结论的标记：<c>✓</c> 正常 / <c>!</c> 异常 / <c>✗</c> 失败 / <c>?</c> 未登记判据。</summary>
+    private static string Mark(ProbeState state) => state switch
+    {
+        ProbeState.Problem => "!",
+        ProbeState.Failed => "✗",
+        ProbeState.Undeclared => "?",
+        _ => "✓",
+    };
 
     /// <summary>
     /// 从账本记录还原一个最小 <see cref="ActionResult"/>，只为复用 <see cref="ProbeHealth"/> 的判据。
     /// </summary>
     /// <remarks>
     /// 账本记的是"这次调用发生了什么"，没有完整的输出字典；探测类动作的问题判据依赖输出键，
-    /// 因此这里按动作 ID 重新算一次——<see cref="ProbeHealth"/> 对没有输出的探测动作会保守地
-    /// 判为"有问题"，所以调用方只在 <see cref="ProbeHealth.IsProbe"/> 为真时才用它。
+    /// 因此这里按动作 ID 重新算一次——<see cref="ProbeHealth"/> 对没有判据的探测动作会保守地
+    /// 判为"未登记判据"，所以调用方只在需要时才用它。
+    /// <para>
+    /// <b>失败必须还原成失败</b>：账本里的 <c>Succeeded=false</c> 若被当成"成功但输出为空"，
+    /// 探测判据会因为读不到输出键而判成"有问题"——标记从 ✗ 变成 !，
+    /// 用户看到的就成了"这一项异常"而不是"这一项没测成"。两者处置完全不同。
+    /// </para>
     /// </remarks>
     private static ActionResult Rehydrated(ActionInvocation invocation) =>
-        ActionResult.Ok(invocation.Message, invocation.Outputs);
+        invocation.Succeeded
+            ? ActionResult.Ok(invocation.Message, invocation.Outputs)
+            : ActionResult.Fail(invocation.ErrorCode, invocation.Message) with { Outputs = invocation.Outputs };
     private static string StripAction(string actionId) => actionId["envstation.".Length..];
 
     // ══════════════════════════ actions ══════════════════════════
@@ -589,12 +628,10 @@ internal static class Program
         var index = 1;
         foreach (var invocation in ledger.Invocations)
         {
-            // 三态标记：执行失败 ✗ / 执行成功但报告了异常 ! / 一切正常 ✓。
+            // 四态标记：执行失败 ✗ / 执行成功但结论异常 ! / 检测项未登记判据 ? / 一切正常 ✓。
             // 早先只看 Succeeded，于是"PATH 共 14 项，其中 4 项异常"这一行前面挂着 ✓，
             // 与 doctor 的结论口径也不一致（同源问题见 D-47）。
-            var mark = !invocation.Succeeded ? "✗"
-                : ProbeHealth.IsProblem(invocation.ActionId, Rehydrated(invocation)) ? "!"
-                : "✓";
+            var mark = Mark(ProbeHealth.Assess(invocation.ActionId, Rehydrated(invocation)).State);
 
             Console.WriteLine(
                 $"  {index++,2}. {mark} {invocation.ActionId,-38} {TrimSentence(OneLine(invocation.Message))}");

@@ -48,6 +48,7 @@ internal static class Program
         SourceRouteCases(h);
         PathRuleCases(h);
         WriteProbeCases(h);
+        DetectionRemedyCases(h);
         WiringCases(h);
 
         var code = h.Summarize();
@@ -1735,24 +1736,250 @@ internal static class Program
             Assert.Equal(0, RemedyCatalog.FromDetection("envstation.detect.runtime", outputs).Length,
                 "找到了就不该报缺件。");
         });
+    }
 
-        h.Case("UI-44", "接线：映射表覆盖了界面实际会跑的全部检测项", () =>
+    // ══════════════════════════ 检测 → 待办项（X-2） ══════════════════════════
+
+    private static void DetectionRemedyCases(TestHarness h)
+    {
+        h.Case("UI-44", "★接线：每个检测类动作都有判据，且判据真的会产出待办项", () =>
         {
-            // 界面「环境检测」页跑的检测项。少一个映射就意味着那一项在界面上只能干看。
-            string[] uiDetections =
-            [
-                "envstation.detect.os",
-                "envstation.path.validate",
-                "envstation.detect.deps",
-                "envstation.detect.conflict",
-            ];
+            // 两件事一起查，缺一不可：
+            //   ① 覆盖：注册表里的检测类动作都必须登记（漏一个 = 那一项在界面上只能干看）；
+            //   ② 阳性对照：喂一份"必然有问题"的输出，必须真的产出待办项。
+            // 只查 ① 的话，映射表整个返回空数组也能通过——这正是"假绿"的经典形状。
+            var registry = CoreActions.ActionRegistry.CreateDefault(new AbsDiag.FindingBag()).Value;
+            var detectActions = registry.Descriptors
+                .Select(static d => d.ActionId)
+                .Where(static id => id.StartsWith("envstation.detect.", StringComparison.Ordinal)
+                                    || string.Equals(id, "envstation.path.validate", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal)
+                .ToArray();
 
-            foreach (var actionId in uiDetections)
+            Assert.True(detectActions.Length >= 10, $"应至少查到 10 个检测类动作，实际 {detectActions.Length} 个。");
+
+            foreach (var actionId in detectActions)
             {
                 Assert.True(RemedyCatalog.IsMapped(actionId),
-                    $"{actionId} 未登记映射：检测得出问题却给不出处置，正是本次要消除的缺陷。");
+                    $"{actionId} 未登记判据：检测得出问题却给不出处置，正是本次要消除的缺陷。");
+            }
+
+            foreach (var actionId in RemedyCatalog.MappedDetections)
+            {
+                Assert.True(
+                    detectActions.Contains(actionId, StringComparer.Ordinal),
+                    $"判据表里的 {actionId} 不在检测类动作清单里（打字错误，或动作被删了却没同步判据表）。");
+            }
+
+            foreach (var (actionId, problem) in ProblemSamples())
+            {
+                var items = RemedyCatalog.FromDetection(actionId, problem, "user");
+                Assert.True(items.Length > 0,
+                    $"{actionId}：这份输出表示有问题，却没有产出任何待办项——界面会显示「一切正常」。");
             }
         });
+
+        h.Case("UI-128", "★判据：架构处于模拟运行时必须报出来", () =>
+        {
+            var emulated = RemedyCatalog.FromDetection("envstation.detect.arch", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["process_arch"] = "x64",
+                ["os_arch"] = "arm64",
+                ["emulated"] = "true",
+            });
+
+            Assert.Equal(1, emulated.Length, "模拟运行必须是一条待办项，不能只做成界面上的角标。");
+            Assert.Contains("arm64", emulated[0].Impact, "要写清该换成哪个架构的版本。");
+            Assert.False(emulated[0].CanAutoFix, "换程序版本不是我们能代做的。");
+
+            Assert.Equal(0, RemedyCatalog.FromDetection("envstation.detect.arch", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["process_arch"] = "x64",
+                ["os_arch"] = "x64",
+                ["emulated"] = "false",
+            }).Length, "架构一致时不该报警。");
+        });
+
+        h.Case("UI-129", "★判据：命令找不到时必须给出去哪里装", () =>
+        {
+            var missing = RemedyCatalog.FromDetection("envstation.detect.command", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["command"] = "winget",
+                ["found"] = "false",
+                ["scope"] = "merged",
+            });
+
+            Assert.Equal(1, missing.Length, "winget 缺失是安装链路的前置事实，必须报出来。");
+            Assert.Contains("应用安装程序", missing[0].Impact, "要给出具体去处，不能只说「未找到」。");
+            Assert.Contains("合并", missing[0].Symptom, "作用域要用中文标签，不能把 merged 这种取值直接写进句子里。");
+            Assert.False(missing[0].CanAutoFix, "装 winget 得走 Store，环境站自己没有这条动作。");
+
+            var found = RemedyCatalog.FromDetection("envstation.detect.command", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["command"] = "git",
+                ["found"] = "true",
+                ["resolved_path"] = @"C:\Program Files\Git\cmd\git.exe",
+            });
+
+            Assert.Equal(0, found.Length, "找到了就不该报。");
+        });
+
+        h.Case("UI-130", "★判据：空间不足与写不进去必须分成两条", () =>
+        {
+            // 合成一条会让用户去删文件，却依然写不进去——两者的处置完全不同。
+            var both = RemedyCatalog.FromDetection("envstation.detect.disk", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["drive"] = @"C:\",
+                ["available_bytes"] = "1000000",
+                ["required_bytes"] = "9000000",
+                ["enough"] = "false",
+                ["writable"] = "false",
+                ["write_reason"] = "没有写入权限：C:\\Windows（对路径的访问被拒绝）",
+                ["probed_path"] = @"C:\Windows",
+            });
+
+            Assert.Equal(2, both.Length, "空间不足与不可写是两件事，必须各占一条。");
+            Assert.Equal(RemedySeverity.Critical, both[0].Severity, "两者都是阻断级（需求 5.8）。");
+            Assert.Contains("空间不足", both[0].Title, "一条讲空间。");
+
+            var notWritable = both.Single(static i => i.Id == "disk.not-writable");
+            Assert.Contains("写入测试未通过", notWritable.Title, "另一条讲写入测试。");
+            Assert.Contains(
+                "没有写入权限",
+                notWritable.Symptom,
+                "原因要照抄真实写入测试给出的那句话，不能换成笼统的「不可写」。");
+            Assert.Contains(
+                "真的写了一个文件",
+                notWritable.Cause,
+                "要说明这不是推测，而是真的写了一次（需求 V6 的口径）。");
+
+            var fine = RemedyCatalog.FromDetection("envstation.detect.disk", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["drive"] = @"C:\",
+                ["enough"] = "true",
+                ["writable"] = "true",
+            });
+
+            Assert.Equal(0, fine.Length, "空间够且可写时不该报警。");
+        });
+
+        h.Case("UI-131", "判据：网络全不可达与部分不可达分级不同", () =>
+        {
+            var none = RemedyCatalog.FromDetection("envstation.detect.network", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["reachable_count"] = "0",
+                ["total"] = "2",
+                ["results"] = "a=fail, b=fail",
+            });
+
+            Assert.Equal(1, none.Length, "全部不可达必须报。");
+            Assert.Equal(RemedySeverity.Critical, none[0].Severity, "一个都连不上时在线安装整条路都走不通。");
+            Assert.Contains("本地归档", none[0].Impact, "要说清还能怎么办。");
+
+            var partial = RemedyCatalog.FromDetection("envstation.detect.network", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["reachable_count"] = "1",
+                ["total"] = "2",
+                ["results"] = "a=ok, b=fail",
+            });
+
+            Assert.Equal(RemedySeverity.Warning, partial[0].Severity, "部分可达只是慢或可能失败，不是全线不通。");
+
+            Assert.Equal(0, RemedyCatalog.FromDetection("envstation.detect.network", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["reachable_count"] = "2",
+                ["total"] = "2",
+                ["results"] = "a=ok, b=ok",
+            }).Length, "全部可达时不该报警。");
+        });
+
+        h.Case("UI-132", "★判据：环境变量读取失败与变量未定义分开报", () =>
+        {
+            var unreadable = RemedyCatalog.FromDetection("envstation.detect.env", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["found_count"] = "0",
+                ["details"] = "[machine] 读取失败：拒绝访问注册表项 || [user] PATH = C:\\Windows",
+            });
+
+            Assert.Equal(1, unreadable.Length, "读不到注册表要报——读不到就不能假装这些变量没问题。");
+            Assert.Contains("读取失败", unreadable[0].Symptom, "现象里要带上具体是哪一句失败。");
+
+            var undefined = RemedyCatalog.FromDetection("envstation.detect.env", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["found_count"] = "1",
+                ["details"] = "[user] JAVA_HOME 未定义 || [user] PATH = C:\\Windows",
+            });
+
+            Assert.Equal(1, undefined.Length, "点名要的变量没读到要报。");
+            Assert.Contains("JAVA_HOME", undefined[0].Title, "标题里要点出是哪个变量。");
+
+            // 阴性对照：列全部变量时读到很多，不该报。
+            Assert.Equal(0, RemedyCatalog.FromDetection("envstation.detect.env", new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["found_count"] = "42",
+                ["details"] = "[user] 共 42 个变量",
+            }).Length, "正常的变量列表不该报警。");
+        });
+
+        h.Case("UI-133", "★判据产出的待办项必须四段齐全，且修复动作真实存在", () =>        {
+            // DP-6：现象/原因/影响/怎么办缺一段就不算合格的一条。
+            // 另外，修复计划里引用的动作 ID 必须真的在动作注册表里——写错一个字母，
+            // 界面上的「修复」按钮就会在点下去之后才失败。
+            var registry = CoreActions.ActionRegistry.CreateDefault(new AbsDiag.FindingBag()).Value;
+
+            foreach (var (actionId, problem) in ProblemSamples())
+            {
+                foreach (var item in RemedyCatalog.FromDetection(actionId, problem, "user"))
+                {
+                    Assert.True(item.Symptom.Length > 0, $"{item.Id}：缺「现象」段。");
+                    Assert.True(item.Cause.Length > 0, $"{item.Id}：缺「原因」段。");
+                    Assert.True(item.Impact.Length > 0, $"{item.Id}：缺「影响」段。");
+                    Assert.Equal(actionId, item.RuleId, $"{item.Id} 的来源检测项写错了，界面无法回溯到是哪一项查出来的。");
+
+                    foreach (var stepAction in item.Plan.ActionIds)
+                    {
+                        Assert.True(
+                            registry.Descriptors.Any(d => string.Equals(d.ActionId, stepAction, StringComparison.Ordinal)),
+                            $"{item.Id} 的修复步骤引用了不存在的动作 {stepAction}。");
+                    }
+                }
+            }
+        });
+    }
+
+    /// <summary>
+    /// 每个检测项的一份"必然有问题"的输出样本（阳性对照用）。
+    /// </summary>
+    /// <remarks>
+    /// 键名取自各动作自己声明的输出契约。写错键名会让待办项静默消失，
+    /// 因此这份样本同时也是键名的一份存档：改了动作的输出键，这里必须跟着改。
+    /// </remarks>
+    private static IEnumerable<(string ActionId, Dictionary<string, string> Outputs)> ProblemSamples()
+    {
+        yield return ("envstation.detect.os", NewOutputs(("supported", "false"), ("build", "10240")));
+        yield return ("envstation.detect.arch", NewOutputs(("process_arch", "x64"), ("os_arch", "arm64"), ("emulated", "true")));
+        yield return ("envstation.detect.command", NewOutputs(("command", "winget"), ("found", "false"), ("scope", "merged")));
+        yield return ("envstation.detect.runtime", NewOutputs(("kind", "python"), ("found", "false")));
+        yield return ("envstation.detect.disk", NewOutputs(("drive", @"C:\"), ("enough", "false"), ("writable", "false"), ("write_reason", "没有写入权限"), ("probed_path", @"C:\Windows")));
+        yield return ("envstation.detect.deps", NewOutputs(("missing_count", "1"), ("missing", "vcredist-2015-2022-x64")));
+        yield return ("envstation.detect.network", NewOutputs(("reachable_count", "0"), ("total", "2"), ("results", "a=fail, b=fail")));
+        yield return ("envstation.detect.conflict", NewOutputs(("conflict_count", "2"), ("conflicts", "yarn || python")));
+        yield return ("envstation.detect.env", NewOutputs(("found_count", "0"), ("details", "[user] JAVA_HOME 未定义")));
+        yield return ("envstation.path.validate", NewOutputs(
+            ("entry_count", "5"), ("problem_count", "3"), ("missing_count", "1"),
+            ("duplicate_count", "1"), ("empty_count", "1"), ("unresolved_count", "0"),
+            ("length", "300"), ("over_legacy_limit", "false"), ("details", @"C:\Gone —— 不存在")));
+    }
+
+    private static Dictionary<string, string> NewOutputs(params (string Key, string Value)[] pairs)
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (key, value) in pairs)
+        {
+            map[key] = value;
+        }
+
+        return map;
     }
 
     private static RemedyItem MakeRemedy(string id, RemedySeverity severity, RiskLevel risk) =>

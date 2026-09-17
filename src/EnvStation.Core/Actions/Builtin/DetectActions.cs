@@ -637,7 +637,12 @@ internal sealed class DetectDiskAction : ActionBase
             return Fail(EnvStationErrorCodes.PreflightPathNotWritable, write.ToLine());
         }
 
-        var ok = $"磁盘 {root}（{drive.DriveFormat}）可用 {Mb(available)}，可写：{(write.Ok ? "是" : "否")}。";
+        // 写入失败时把原因写进这句话本身：体检每一项只打一行，细节不落在这一行上
+        // 用户就只剩一个"可写：否"，而"为什么不可写"才是他能动手的地方。
+        var ok = write.Ok
+            ? $"磁盘 {root}（{drive.DriveFormat}）可用 {Mb(available)}，可写：是。"
+            : $"磁盘 {root}（{drive.DriveFormat}）可用 {Mb(available)}，真实写入测试未通过：{write.FailureReason}";
+
         context.ReportProgress(100, ok);
         return Ok(ok, outputs);
     }

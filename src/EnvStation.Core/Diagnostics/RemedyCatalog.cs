@@ -2,6 +2,7 @@ using System.Collections.Immutable;
 using System.Globalization;
 using EnvStation.Abstractions.Actions;
 using EnvStation.Abstractions.Transactions;
+using EnvStation.Core.Actions.Builtin;
 
 namespace EnvStation.Core.Diagnostics;
 
@@ -57,32 +58,61 @@ public static class RemedyCatalog
         ArgumentException.ThrowIfNullOrWhiteSpace(actionId);
         ArgumentNullException.ThrowIfNull(outputs);
 
-        return actionId switch
+        if (ReportOnly.TryGetValue(actionId, out _))
         {
-            "envstation.detect.os" => FromOs(outputs),
-            "envstation.path.validate" => FromPathValidate(outputs, scope),
-            "envstation.detect.deps" => FromDependencies(outputs),
-            "envstation.detect.conflict" => FromConflicts(outputs),
-            "envstation.detect.runtime" => FromRuntime(outputs),
-            _ => [],
-        };
+            return [];
+        }
+
+        return Judges.TryGetValue(actionId, out var judge) ? judge(outputs, scope) : [];
     }
 
-    /// <summary>该检测项是否已登记映射（无论是否可修复）。未登记者由用例拦下。</summary>
-    public static bool IsMapped(string actionId) => actionId switch
-    {
-        "envstation.detect.os" or
-        "envstation.path.validate" or
-        "envstation.detect.deps" or
-        "envstation.detect.conflict" or
-        "envstation.detect.runtime" => true,
-        _ => false,
-    };
+    /// <summary>已登记判据的检测项（动作 ID → 判定函数）。</summary>
+    /// <remarks>
+    /// <b>为什么是三张表要合成一张</b>：早先"有哪些检测项"这件事写在三个地方
+    /// （<c>FromDetection</c> 的 <c>switch</c>、<c>IsMapped</c> 的 <c>switch</c>、
+    /// <c>MappedDetections</c> 的数组），加一个检测项要改三处，漏一处就是
+    /// "检测得出问题、界面上只显示一行字"。现在只有这一张表，另外两个 API 从它派生。
+    /// </remarks>
+    private static readonly ImmutableDictionary<string, Func<IReadOnlyDictionary<string, string>, string, ImmutableArray<RemedyItem>>> Judges =
+        new Dictionary<string, Func<IReadOnlyDictionary<string, string>, string, ImmutableArray<RemedyItem>>>(StringComparer.Ordinal)
+        {
+            ["envstation.detect.os"] = (outputs, _) => FromOs(outputs),
+            ["envstation.detect.arch"] = (outputs, _) => FromArch(outputs),
+            ["envstation.detect.command"] = (outputs, _) => FromCommand(outputs),
+            ["envstation.detect.runtime"] = (outputs, _) => FromRuntime(outputs),
+            ["envstation.detect.disk"] = (outputs, _) => FromDisk(outputs),
+            ["envstation.detect.deps"] = (outputs, _) => FromDependencies(outputs),
+            ["envstation.detect.network"] = (outputs, _) => FromNetwork(outputs),
+            ["envstation.detect.conflict"] = (outputs, _) => FromConflicts(outputs),
+            ["envstation.detect.env"] = (outputs, _) => FromEnvironment(outputs),
+            ["envstation.path.validate"] = (outputs, scope) => FromPathValidate(outputs, scope),
+        }.ToImmutableDictionary(StringComparer.Ordinal);
 
-    /// <summary>当前已登记映射的检测项（用例据此比对动作注册表，防止新增检测项时漏接）。</summary>
+    /// <summary>
+    /// 显式声明"只报告、不产出待办项"的检测项 → 理由。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>为什么要有这张表</b>：一个检测项如果既没有判据、又没有在这里声明，
+    /// 那么它检出的问题在界面上就是<b>静默消失</b>的——用户看不到，我们也不知道。
+    /// 用例遍历动作注册表，要求每个检测类动作要么在 <see cref="Judges"/> 里，要么在这里，
+    /// 两者都没有即失败。
+    /// </para>
+    /// <para>
+    /// 目前为空：全部 10 个检测项都有判据。空表不是"这张表没用"——
+    /// 它是下一个新增检测项必须经过的那道门。
+    /// </para>
+    /// </remarks>
+    public static ImmutableDictionary<string, string> ReportOnly { get; } =
+        ImmutableDictionary<string, string>.Empty;
+
+    /// <summary>该检测项是否已登记判据（产出待办项，或显式声明只报告）。未登记者由用例拦下。</summary>
+    public static bool IsMapped(string actionId) =>
+        Judges.ContainsKey(actionId) || ReportOnly.ContainsKey(actionId);
+
+    /// <summary>当前已登记判据的检测项（用例据此比对动作注册表，防止新增检测项时漏接）。</summary>
     public static ImmutableArray<string> MappedDetections { get; } =
-        ["envstation.detect.os", "envstation.path.validate", "envstation.detect.deps",
-         "envstation.detect.conflict", "envstation.detect.runtime"];
+        [.. Judges.Keys.Order(StringComparer.Ordinal)];
 
     private static ImmutableArray<RemedyItem> FromOs(IReadOnlyDictionary<string, string> outputs)
     {
@@ -284,8 +314,241 @@ public static class RemedyCatalog
         return builders.ToImmutable();
     }
 
-    private static ImmutableArray<RemedyItem> FromRuntime(IReadOnlyDictionary<string, string> outputs)
+    /// <summary>
+    /// 架构检测：进程架构与系统架构不一致时，程序正跑在模拟模式下。
+    /// </summary>
+    /// <remarks>
+    /// 需求 5.8 要求"及时制止"：在 ARM64 上用 x64 仿真跑环境站，装的却是原生组件，
+    /// 结果通常是"装完了但用不了"。因此这一条必须成一条待办项，而不是界面上一个不起眼的角标。
+    /// </remarks>
+    private static ImmutableArray<RemedyItem> FromArch(IReadOnlyDictionary<string, string> outputs)
     {
+        if (!IsTrue(outputs, "emulated"))
+        {
+            return [];
+        }
+
+        var process = Or(Get(outputs, "process_arch"), "未知");
+        var os = Or(Get(outputs, "os_arch"), "未知");
+
+        return
+        [
+            RemedyItem.Notice(
+                "arch.emulated",
+                RemedySeverity.Warning,
+                "环境站正以模拟方式运行",
+                $"当前进程架构为 {process}，而系统架构是 {os}。",
+                "在 64 位系统上运行了另一个指令集的程序，Windows 会自动用模拟层承载它。",
+                "模拟层下的进程无法可靠判断本机架构，安装原生组件时可能选错版本（典型结果是装完但用不了）。" +
+                $"请改用与系统架构匹配的环境站版本（{os}）。",
+                "envstation.detect.arch",
+                RiskLevel.Safe),
+        ];
+    }
+
+    /// <summary>命令未找到时给出去哪里装的具体去处。</summary>
+    private static readonly ImmutableDictionary<string, string> CommandGuides =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["winget"] = "Windows 11 与较新的 Windows 10 自带「应用安装程序」（即 winget）。若已被卸载，可在 Microsoft Store 里重新安装「应用安装程序」。",
+            ["git"] = "从 git-scm.com 下载 Git for Windows 安装。",
+            ["python"] = "从 python.org 下载安装，或在环境站的运行时页选择版本安装。",
+            ["python3"] = "从 python.org 下载安装，或在环境站的运行时页选择版本安装。",
+            ["java"] = "安装 JDK（如 Eclipse Temurin 或 Microsoft Build of OpenJDK）。",
+            ["javac"] = "安装 JDK（只装 JRE 不会有 javac）。",
+            ["node"] = "从 nodejs.org 下载 LTS 版本安装，或用 winget 安装 OpenJS.NodeJS.LTS。",
+            ["npm"] = "npm 随 Node.js 一起安装，请先装 Node.js。",
+            ["dotnet"] = "安装 .NET SDK。",
+        }.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
+
+    /// <summary>
+    /// 命令解析追踪：找不到命令时给出去处。
+    /// </summary>
+    /// <remarks>
+    /// 这一条是安装链路的<b>前置事实</b>：winget 不在就装不了任何东西，
+    /// 而此前界面与命令行都只是把"未找到"打印出来，用户拿不到下一步。
+    /// </remarks>
+    private static ImmutableArray<RemedyItem> FromCommand(IReadOnlyDictionary<string, string> outputs)
+    {
+        if (IsTrue(outputs, "found"))
+        {
+            return [];
+        }
+
+        var command = Get(outputs, "command");
+        var name = command.Length > 0 ? command : "目标命令";
+        var guide = CommandGuides.TryGetValue(name, out var text)
+            ? text
+            : "该命令没有安装，或它所在的目录不在 PATH 中。";
+
+        return
+        [
+            RemedyItem.Notice(
+                $"command.{name}.missing",
+                RemedySeverity.Warning,
+                $"未找到命令 {name}",
+                $"在{EnvironmentPathResolver.ToScopeLabel(Or(Get(outputs, "scope"), "merged"))} PATH 中没有解析到 {name}。",
+                "程序未安装，或安装后没有把所在目录加入 PATH。",
+                $"{guide}依赖它的流程会在调用时才失败，而不是在检查阶段。",
+                "envstation.detect.command",
+                RiskLevel.Safe),
+        ];
+    }
+
+    /// <summary>
+    /// 磁盘检测：空间不足与"真实写入测试未通过"分开报。
+    /// </summary>
+    /// <remarks>
+    /// 两者都是阻断级（需求 5.8），但处置完全不同：一个要腾地方，另一个要换位置或改权限。
+    /// 合成一条会让用户去删文件却依然写不进去。
+    /// </remarks>
+    private static ImmutableArray<RemedyItem> FromDisk(IReadOnlyDictionary<string, string> outputs)
+    {
+        var items = ImmutableArray.CreateBuilder<RemedyItem>();
+        var drive = Or(Get(outputs, "drive"), "目标磁盘");
+
+        if (!IsTrue(outputs, "enough"))
+        {
+            items.Add(RemedyItem.Notice(
+                "disk.insufficient",
+                RemedySeverity.Critical,
+                $"磁盘 {drive} 空间不足",
+                $"可用 {Get(outputs, "available_bytes")} 字节，而本次需要 {Get(outputs, "required_bytes")} 字节（含 1.5 倍余量）。",
+                "目标盘剩余空间低于安装所需。",
+                "装到一半空间耗尽会留下半成品环境，而且此时回滚本身也可能因为没空间而失败。请先腾出空间或改到别的磁盘。",
+                "envstation.detect.disk",
+                RiskLevel.Safe));
+        }
+
+        if (!IsTrue(outputs, "writable"))
+        {
+            items.Add(RemedyItem.Notice(
+                "disk.not-writable",
+                RemedySeverity.Critical,
+                "目标位置写入测试未通过",
+                Or(Get(outputs, "write_reason"), $"在 {Get(outputs, "probed_path")} 写入并删除测试文件失败。"),
+                "前置检查真的写了一个文件再删掉（需求 V6），因此这不是推测：这个位置当前写不进去。",
+                "常见原因是目录只读、权限被组策略限制、被安全软件拦截，或上级路径其实是一个文件。" +
+                "换一个用户可写的位置，或调整权限后重试。",
+                "envstation.detect.disk",
+                RiskLevel.Safe));
+        }
+
+        return items.ToImmutable();
+    }
+
+    /// <summary>网络检测：部分或全部主机不可达。</summary>
+    private static ImmutableArray<RemedyItem> FromNetwork(IReadOnlyDictionary<string, string> outputs)
+    {
+        var total = Count(outputs, "total");
+        var reachable = Count(outputs, "reachable_count");
+        if (total <= 0 || reachable >= total)
+        {
+            return [];
+        }
+
+        var severity = reachable == 0 ? RemedySeverity.Critical : RemedySeverity.Warning;
+
+        return
+        [
+            RemedyItem.Notice(
+                "network.unreachable",
+                severity,
+                reachable == 0 ? "所有检测目标都不可达" : $"{total - reachable} 个检测目标不可达",
+                $"{reachable}/{total} 个主机可达：{Get(outputs, "results")}",
+                "网络不通、被代理拦截，或目标站点本身故障。探测会校验 TLS 证书，"
+                + "因此「能连上但证书不对」（透明代理、DNS 泛解析）同样判为不可达。",
+                reachable == 0
+                    ? "在线安装与镜像下载都无法进行，请改用本地归档安装包，或先解决网络。"
+                    : "相关下载可能很慢或失败，可在设置里换用镜像源，或改用本地归档安装包。",
+                "envstation.detect.network",
+                RiskLevel.Safe),
+        ];
+    }
+
+    /// <summary>
+    /// 环境变量读取：读取失败与"请求的变量未定义"分开报。
+    /// </summary>
+    /// <remarks>
+    /// 刻意不把"变量未定义"一律当问题：只有调用方<b>点名要</b>的变量没读到才算问题
+    /// （检测本身没有"这个变量该不该有"的上下文）。因此按明细行里是否出现"未定义"来判断，
+    /// 而不是按 <c>found_count</c>——列全部变量时读到 0 个只说明这台机器的环境被清空了。
+    /// </remarks>
+    private static ImmutableArray<RemedyItem> FromEnvironment(IReadOnlyDictionary<string, string> outputs)
+    {
+        var details = Get(outputs, "details");
+        var items = ImmutableArray.CreateBuilder<RemedyItem>();
+
+        if (details.Contains("读取失败", StringComparison.Ordinal))
+        {
+            items.Add(RemedyItem.Notice(
+                "env.unreadable",
+                RemedySeverity.Warning,
+                "部分环境变量读取失败",
+                FirstLineContaining(details, "读取失败"),
+                "注册表中的用户级或系统级环境变量键不可读（权限不足或被安全软件锁定）。",
+                "读不到就无法判断这些变量的现状，任何基于它们的结论都不可靠。请以管理员身份重试，或检查注册表权限。",
+                "envstation.detect.env",
+                RiskLevel.Safe));
+        }
+
+        var undefined = UndefinedNames(details);
+        if (undefined.Length > 0)
+        {
+            items.Add(RemedyItem.Notice(
+                "env.variable-undefined",
+                RemedySeverity.Warning,
+                $"变量 {string.Join("、", undefined)} 未定义",
+                "点名读取的环境变量在本机不存在。",
+                "该变量从未设置，或被某个安装程序清掉了。",
+                "依赖它的程序会读到空值，而空值往往被当成「没配置」以外的意思，导致行为难以判断。",
+                "envstation.detect.env",
+                RiskLevel.Safe));
+        }
+
+        return items.ToImmutable();
+    }
+
+    /// <summary>从明细里挑出"未定义"的变量名。</summary>
+    private static ImmutableArray<string> UndefinedNames(string details)
+    {
+        var names = ImmutableArray.CreateBuilder<string>();
+        foreach (var line in details.Split("||", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            const string marker = " 未定义";
+            var index = line.IndexOf(marker, StringComparison.Ordinal);
+            if (index <= 0)
+            {
+                continue;
+            }
+
+            // 明细行的形状是 "[user] JAVA_HOME 未定义"：取掉作用域前缀之后就是变量名。
+            var head = line[..index];
+            var close = head.IndexOf(']', StringComparison.Ordinal);
+            var name = (close >= 0 ? head[(close + 1)..] : head).Trim();
+            if (name.Length > 0)
+            {
+                names.Add(name);
+            }
+        }
+
+        return names.ToImmutable();
+    }
+
+    private static string FirstLineContaining(string details, string marker)
+    {
+        foreach (var line in details.Split("||", StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            if (line.Contains(marker, StringComparison.Ordinal))
+            {
+                return line;
+            }
+        }
+
+        return marker;
+    }
+
+    private static ImmutableArray<RemedyItem> FromRuntime(IReadOnlyDictionary<string, string> outputs)    {
         if (IsTrue(outputs, "found"))
         {
             return [];

@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 
 namespace EnvStation.Core.Diagnostics;
 
@@ -47,20 +47,70 @@ public sealed class TriagePlan
     public ImmutableArray<TriageCheck> Checks => _checks;
 
     /// <summary>
+    /// 体检时检查的安装根目录：环境站自己的用户级目录。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// 刻意不用 <c>Path.GetTempPath()</c>：临时目录几乎永远可写，拿它做写入测试等于没测。
+    /// 这里要问的是"用户级安装默认会落在哪、那儿能不能写"。
+    /// </para>
+    /// <para>
+    /// 取不到 <c>%LOCALAPPDATA%</c> 时返回空串而<b>不是</b>编一个路径出来：
+    /// 空串会让这一项检测直接失败并显示为失败，那才是这台机器的真实状态。
+    /// </para>
+    /// <para>
+    /// <b>声明顺序不能改</b>：它必须排在 <see cref="Default"/> 前面——静态初始化按声明顺序执行，
+    /// 排在后面时 <see cref="Default"/> 读到的就是 null。编译器把这条当 CS8601 拦了下来
+    /// （本项目"警告即错误"，所以它第一次编译就炸了，而不是等到运行时体检去写一个空路径）。
+    /// </para>
+    /// </remarks>
+    private static string InstallRoot { get; } = BuildInstallRoot();
+
+    /// <summary>
     /// 默认检测清单（图形界面首页与 CLI <c>doctor</c> 共用）。
     /// </summary>
     /// <remarks>
+    /// <para>
     /// 每一项都在 <see cref="RemedyCatalog.MappedDetections"/> 里有映射，
     /// 否则它检出的问题在界面上只能干看——这条由用例盯着。
+    /// </para>
+    /// <para>
+    /// <b>清单里放什么、不放什么</b>：只放"本地、快、结论明确"的项。因此
+    /// <c>detect.arch</c>（模拟运行）、<c>detect.command</c>（winget 是不是在）与
+    /// <c>detect.disk</c>（环境站自己的安装根目录能不能写）都进来了——
+    /// 它们决定"接下来能不能装东西"，而此前体检根本不看这三件事，
+    /// 用户看到"未发现问题"，然后在安装时才第一次撞上"winget 不存在"。
+    /// </para>
+    /// <para>
+    /// <b>网络检测刻意不在默认清单里</b>：它要联网、要几秒钟，而且检测哪些主机
+    /// 取决于安装源的选择（镜像源定下来之前，测谁都是猜）。它由安装前置检查按目标源调用。
+    /// </para>
     /// </remarks>
     public static ImmutableArray<TriageCheck> Default { get; } =
     [
         new("envstation.detect.os", "系统版本"),
+        new("envstation.detect.arch", "CPU 架构"),
         new("envstation.path.validate", "用户 PATH", "user"),
         new("envstation.path.validate", "系统 PATH", "machine"),
         new("envstation.detect.deps", "前置依赖"),
         new("envstation.detect.conflict", "命令冲突"),
+        new("envstation.detect.command", "包管理器", Arguments: new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["command"] = "winget",
+        }),
+        new("envstation.detect.disk", "安装位置可写性", Arguments: new Dictionary<string, string>(StringComparer.Ordinal)
+        {
+            ["path"] = InstallRoot,
+        }),
     ];
+
+    private static string BuildInstallRoot() =>
+        Path.Combine(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData) ?? string.Empty,
+            "EnvStation");
+
+    /// <summary>体检时检查的安装根目录（界面与报告里显示用）。</summary>
+    public static string DefaultInstallRoot => InstallRoot;
 
     /// <summary>
     /// 跑完全部检测并汇成报告。

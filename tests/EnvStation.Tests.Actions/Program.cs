@@ -1136,5 +1136,155 @@ internal static class Program
             Assert.Equal("0", result.Outputs["reachable_count"],
                 $"不存在的域名必须判为不可达。实际结果：{result.Outputs["results"]}");
         });
+
+        // ══════════════════ X-2：检测判据的机械覆盖检查 ══════════════════
+
+        h.Case("AC-60", "★X-2：每个检测类动作都登记了问题判据（遍历动作注册表）", () =>
+        {
+            // 这条用例是"检测出来之后呢"这个缺陷的机械闸门。
+            // 背景：ProbeHealth 的判据表原先只有 4 项，而 CLI 的 doctor 已经在跑
+            // detect.arch / detect.disk / detect.env —— 它们**永远显示绿色对勾**，
+            // 哪怕磁盘写入测试没过。判据表漏项不会报错，只会静默报平安，所以必须遍历注册表来盯。
+            var registry = CoreActions.ActionRegistry.CreateDefault(new AbsDiag.FindingBag()).Value;
+
+            var detectActions = registry.Descriptors
+                .Select(static d => d.ActionId)
+                .Where(static id => id.StartsWith("envstation.detect.", StringComparison.Ordinal))
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+
+            Assert.True(detectActions.Length >= 9, $"应至少查到 9 个探测动作，实际 {detectActions.Length} 个。");
+
+            foreach (var actionId in detectActions)
+            {
+                Assert.True(CoreActions.ProbeHealth.IsProbe(actionId),
+                    $"{actionId} 没有登记问题判据：它检出的异常在界面与命令行上都会显示成正常。");
+            }
+
+            // path.validate 不在 detect 命名空间里，但它是只读校验、同样会"成功返回但结论异常"。
+            // 补这一条是因为改造判据表时真的把它漏掉过：CLI 体检从"4 项异常"变成"2 项异常"。
+            Assert.True(CoreActions.ProbeHealth.IsProbe("envstation.path.validate"),
+                "path.validate 与探测同类，必须有判据。");
+
+            // 反向：判据表里的 ID 必须真实存在，否则是打字错误或动作已被删除。
+            foreach (var actionId in CoreActions.ProbeHealth.Probes)
+            {
+                Assert.True(
+                    registry.Descriptors.Any(d => string.Equals(d.ActionId, actionId, StringComparison.Ordinal)),
+                    $"判据表里的 {actionId} 在动作注册表里不存在（打字错误，或动作被删了却没同步判据表）。");
+            }
+        });
+
+        h.Case("AC-61", "★X-2：每条判据在「有问题」与「正常」两种输入下结论相反", () =>
+        {
+            // 阳性对照与阴性对照必须成对：只测其中一边，一条恒返回"正常"或恒返回"有问题"
+            // 的判据都能蒙过去。
+            foreach (var (actionId, problem, healthy) in JudgeSamples())
+            {
+                var bad = CoreActions.ProbeHealth.Assess(actionId, AbsActions.ActionResult.Ok("动作自己说执行成功", problem));
+                Assert.Equal(CoreActions.ProbeState.Problem, bad.State,
+                    $"{actionId}：这份输出表示有问题，判据却说是「{bad.State}」。");
+                Assert.True(bad.Reason is { Length: > 0 }, $"{actionId}：判为异常时必须说明为什么。");
+
+                var good = CoreActions.ProbeHealth.Assess(actionId, AbsActions.ActionResult.Ok("一切正常", healthy));
+                Assert.Equal(CoreActions.ProbeState.Healthy, good.State,
+                    $"{actionId}：这份输出表示正常，判据却说是「{good.State}」。");
+
+                // 判据键缺失：不能报平安。键名写错是必然会发生的事，静默通过就再也发现不了。
+                var missing = CoreActions.ProbeHealth.Assess(actionId, AbsActions.ActionResult.Ok("动作成功", new Dictionary<string, string>(StringComparer.Ordinal)));
+                Assert.Equal(CoreActions.ProbeState.Problem, missing.State,
+                    $"{actionId}：读不到判据键时必须判为异常，而不是当没看见。");
+            }
+        });
+
+        h.Case("AC-62", "X-2：动作失败是失败，不是异常", () =>
+        {
+            var failed = CoreActions.ProbeHealth.Assess(
+                "envstation.detect.deps",
+                AbsActions.ActionResult.Fail("E_TEST", "读注册表失败"));
+
+            Assert.Equal(CoreActions.ProbeState.Failed, failed.State, "动作没测成，与测出问题要分开。");
+            Assert.Equal("✗", CoreActions.ProbeHealth.Mark("envstation.detect.deps", AbsActions.ActionResult.Fail("E_TEST", "x")), "失败用 ✗");
+
+            // 非检测类动作：执行成功就是结论，不能因为没有判据而显示成"未登记判据"。
+            var write = CoreActions.ProbeHealth.Assess(
+                "envstation.env.set",
+                AbsActions.ActionResult.Ok("已设置"));
+            Assert.Equal(CoreActions.ProbeState.NotApplicable, write.State, "写操作只有执行成功与否，没有「结论异常」这一说。");
+            Assert.Equal("✓", CoreActions.ProbeHealth.Mark("envstation.env.set", AbsActions.ActionResult.Ok("已设置")), "写成功应显示对勾");
+        });
+
+        h.Case("AC-63", "★X-2：每个检测类动作都能产出待办项（检测→处置的线必须接上）", () =>
+        {
+            // 判据说"有问题"只是第一步。这条用例盯的是下一步：**问题必须变成一条待办项**，
+            // 否则用户看到的就是一句"异常"然后没有下文——这正是本次重构要消除的缺陷。
+            var mapped = RemedyCatalogProbeIds();
+
+            foreach (var actionId in mapped)
+            {
+                Assert.True(
+                    CoreDiagnostics.RemedyCatalog.IsMapped(actionId),
+                    $"{actionId} 未登记待办项映射：它检出的问题在界面上会静默消失。");
+            }
+        });
+    }
+
+    /// <summary>每个检测项的「有问题」与「正常」两份输入样本。</summary>
+    private static IEnumerable<(string ActionId, Dictionary<string, string> Problem, Dictionary<string, string> Healthy)> JudgeSamples()
+    {
+        yield return ("envstation.detect.os",
+            New(("supported", "false"), ("build", "10240")),
+            New(("supported", "true"), ("build", "22631")));
+
+        yield return ("envstation.detect.arch",
+            New(("emulated", "true"), ("process_arch", "x64"), ("os_arch", "arm64")),
+            New(("emulated", "false"), ("process_arch", "x64"), ("os_arch", "x64")));
+
+        yield return ("envstation.detect.command",
+            New(("command", "winget"), ("found", "false")),
+            New(("command", "winget"), ("found", "true")));
+
+        yield return ("envstation.detect.runtime",
+            New(("kind", "python"), ("found", "false")),
+            New(("kind", "python"), ("found", "true")));
+
+        yield return ("envstation.detect.disk",
+            New(("drive", "C:\\"), ("enough", "true"), ("writable", "false"), ("write_reason", "没有写入权限：C:\\Windows")),
+            New(("drive", "C:\\"), ("enough", "true"), ("writable", "true")));
+
+        yield return ("envstation.detect.deps",
+            New(("missing_count", "1"), ("missing", "vcredist-2015-2022-x64")),
+            New(("missing_count", "0"), ("missing", string.Empty)));
+
+        yield return ("envstation.detect.network",
+            New(("reachable_count", "1"), ("total", "3"), ("results", "a=ok, b=fail, c=fail")),
+            New(("reachable_count", "2"), ("total", "2"), ("results", "a=ok, b=ok")));
+
+        yield return ("envstation.detect.conflict",
+            New(("conflict_count", "2"), ("conflicts", "yarn || python")),
+            New(("conflict_count", "0"), ("conflicts", string.Empty)));
+
+        yield return ("envstation.detect.env",
+            New(("found_count", "0"), ("details", "[user] JAVA_HOME 未定义")),
+            New(("found_count", "2"), ("details", "[user] PATH = …")));
+
+        yield return ("envstation.path.validate",
+            New(("problem_count", "3"), ("missing_count", "2"), ("duplicate_count", "1"), ("empty_count", "0"), ("unresolved_count", "0")),
+            New(("problem_count", "0"), ("missing_count", "0"), ("duplicate_count", "0"), ("empty_count", "0"), ("unresolved_count", "0")));
+    }
+
+    /// <summary>检测类动作清单（与 ProbeHealth.Probes 同源，另加只读校验动作）。</summary>
+    private static string[] RemedyCatalogProbeIds() =>
+        [.. CoreActions.ProbeHealth.Probes];
+
+    private static Dictionary<string, string> New(params (string Key, string Value)[] pairs)
+    {
+        var map = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var (key, value) in pairs)
+        {
+            map[key] = value;
+        }
+
+        return map;
     }
 }

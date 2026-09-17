@@ -1,4 +1,4 @@
-﻿// ============================================================================
+// ============================================================================
 //  测试工程共享的全局 using
 //  （由 tests/Directory.Build.props 通过 <Compile Include> 链接进各测试工程）
 //
@@ -29,6 +29,7 @@ global using CoreEnv = EnvStation.Core.Environment;
 global using CoreTx = EnvStation.Core.Transactions;
 global using CoreInstall = EnvStation.Core.Installation;
 global using CoreActions = EnvStation.Core.Actions;
+global using CoreDiagnostics = EnvStation.Core.Diagnostics;
 global using CoreToml = EnvStation.Core.Toml;
 global using CorePkg = EnvStation.Core.Packages;
 global using CoreScript = EnvStation.Core.Scripting;
