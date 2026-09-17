@@ -31,6 +31,32 @@ $designDir = $PSScriptRoot
 $utf8Bom = New-Object System.Text.UTF8Encoding($true)
 $utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
+# 统一以 LF 落盘。
+#
+# 为什么不用 WriteAllText 直接写：[System.IO.File]::WriteAllText 与 StringBuilder.AppendLine
+# 用的都是 Environment.NewLine，在 Windows 上生成的是 CRLF，而本仓库约定 LF。
+# 结果不是"多个回车"这么简单——校验步骤 T1 会把生成结果和已提交的那份逐字节比对，
+# 于是每次跑校验都先被判成"令牌表是陈旧或被手改过"，本地与 CI 都红。
+# 生成器与仓库的行尾约定必须一致，这个函数就是那条约定。
+function Write-TokenFile {
+    param(
+        [Parameter(Mandatory = $true)][string]$Path,
+        [Parameter(Mandatory = $true)][string]$Content,
+        [Parameter(Mandatory = $true)][System.Text.Encoding]$Encoding
+    )
+
+    $normalized = $Content -replace "`r`n", "`n" -replace "`r", "`n"
+
+    # 文件以单个换行结尾。Set-Content 本来会替我们补这一下，
+    # 改成直接写文件之后必须自己补，否则生成结果与已提交的那份差一个字节，
+    # 校验步骤照样判成"令牌表陈旧"。
+    if (-not $normalized.EndsWith("`n", [System.StringComparison]::Ordinal)) {
+        $normalized += "`n"
+    }
+
+    [System.IO.File]::WriteAllText($Path, $normalized, $Encoding)
+}
+
 Write-Host '环境站 EnvStation · 设计令牌生成' -ForegroundColor Cyan
 Write-Host ('=' * 66) -ForegroundColor DarkCyan
 
@@ -194,7 +220,7 @@ $tokens = [ordered]@{
 }
 
 $jsonPath = Join-Path $designDir 'tokens.json'
-$tokens | ConvertTo-Json -Depth 10 | Set-Content -Path $jsonPath -Encoding UTF8
+Write-TokenFile -Path $jsonPath -Content ($tokens | ConvertTo-Json -Depth 10) -Encoding $utf8Bom
 Write-Host "  已生成 tokens.json            $jsonPath" -ForegroundColor Green
 
 # ============================================================================
@@ -231,7 +257,7 @@ foreach ($m in $MonoScale) {
 }
 
 $mdPath = Join-Path $OutDir 'typography-table.md'
-[System.IO.File]::WriteAllText($mdPath, $sb.ToString(), $utf8Bom)
+Write-TokenFile -Path $mdPath -Content $sb.ToString() -Encoding $utf8Bom
 Write-Host "  已生成 typography-table.md   $mdPath" -ForegroundColor Green
 
 # ============================================================================
@@ -298,7 +324,7 @@ $HcMap = [ordered]@{
 $hcTsv = New-Object System.Text.StringBuilder
 foreach ($k in $HcMap.Keys) { [void]$hcTsv.AppendLine("$k`t$($HcMap[$k])") }
 $hcPath = Join-Path $OutDir 'high-contrast-map.tsv'
-[System.IO.File]::WriteAllText($hcPath, $hcTsv.ToString(), $utf8Bom)
+Write-TokenFile -Path $hcPath -Content $hcTsv.ToString() -Encoding $utf8Bom
 Write-Host "  已生成 high-contrast-map.tsv $hcPath" -ForegroundColor Green
 
 # WinUI 的 FontFamily 不接受逗号分隔的字体栈（那是 CSS 的写法），只取首个族名；
@@ -402,7 +428,7 @@ foreach ($k in $Density.Keys) {
 
 $csPath = Join-Path $root 'src\EnvStation.App\Generated\DesignTokens.g.cs'
 $null = New-Item -ItemType Directory -Force -Path (Split-Path -Parent $csPath)
-[System.IO.File]::WriteAllText($csPath, $cs.ToString(), $utf8Bom)
+Write-TokenFile -Path $csPath -Content $cs.ToString() -Encoding $utf8Bom
 Write-Host "  已生成 DesignTokens.g.cs      $csPath" -ForegroundColor Green
 
 # ============================================================================
