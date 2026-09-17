@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using EnvStation.TestKit;
 
 namespace EnvStation.Tests.Actions;
@@ -954,6 +954,90 @@ internal static class Program
             });
             Assert.False(result.Success, "需求空间超过磁盘容量时应失败");
             Assert.Equal(Abs.EnvStationErrorCodes.PreflightDiskShort, result.ErrorCode, "应返回磁盘不足码");
+        });
+
+        h.Case("AC-41A", "★detect.disk：require_writable 时写入测试未通过即阻断（V6）", () =>
+        {
+            // 造一个必然写不进去的目标：把一个文件当目录用。
+            var dir = Path.Combine(Path.GetTempPath(), "envstation-ac41-" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(dir);
+            var blocker = Path.Combine(dir, "blocker.txt");
+            File.WriteAllText(blocker, "x");
+
+            try
+            {
+                var target = Path.Combine(blocker, "python");
+
+                // 默认口径：只报告，不拦截——全局检测时一个不可写目录不该让整轮检测失败。
+                var reportOnly = RunBuiltin("envstation.detect.disk", new Dictionary<string, AbsPkg.ScriptValue>(StringComparer.Ordinal)
+                {
+                    ["path"] = new AbsPkg.ScriptString(target),
+                });
+                Assert.True(reportOnly.Success, $"默认只报告：{reportOnly.Message}");
+                Assert.Equal("false", reportOnly.Outputs["writable"], "应如实报出不可写");
+                Assert.True(reportOnly.Outputs["write_reason"].Length > 0, "应给出不可写的具体原因");
+
+                // 前置检查口径：拦。
+                var strict = RunBuiltin("envstation.detect.disk", new Dictionary<string, AbsPkg.ScriptValue>(StringComparer.Ordinal)
+                {
+                    ["path"] = new AbsPkg.ScriptString(target),
+                    ["require_writable"] = new AbsPkg.ScriptBoolean(true),
+                });
+                Assert.False(strict.Success, "V6：实际写入测试失败必须阻断");
+                Assert.Equal(Abs.EnvStationErrorCodes.PreflightPathNotWritable, strict.ErrorCode, "应返回路径不可写码");
+
+                // 阳性对照：可写目录在同样参数下必须通过，否则上面两条可能只是因为参数被无视了。
+                var ok = RunBuiltin("envstation.detect.disk", new Dictionary<string, AbsPkg.ScriptValue>(StringComparer.Ordinal)
+                {
+                    ["path"] = new AbsPkg.ScriptString(Path.GetTempPath()),
+                    ["require_writable"] = new AbsPkg.ScriptBoolean(true),
+                });
+                Assert.True(ok.Success, $"可写目录不应被拦：{ok.Message}");
+                Assert.Equal("true", ok.Outputs["writable"], "可写目录应报可写");
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(dir, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // 清理失败不该盖住断言结论。
+                }
+            }
+        });
+
+        h.Case("AC-41B", "★detect.disk：真实写入测试不留残留", () =>
+        {
+            // V6 是前置检查，不是安装：它写下的探测文件必须自己删掉。
+            var dir = Path.Combine(Path.GetTempPath(), "envstation-ac41b-" + Guid.NewGuid().ToString("N")[..8]);
+            Directory.CreateDirectory(dir);
+
+            try
+            {
+                var before = Directory.GetFileSystemEntries(dir).Length;
+                var result = RunBuiltin("envstation.detect.disk", new Dictionary<string, AbsPkg.ScriptValue>(StringComparer.Ordinal)
+                {
+                    ["path"] = new AbsPkg.ScriptString(dir),
+                });
+
+                Assert.True(result.Success, $"应成功：{result.Message}");
+                Assert.Equal(before, Directory.GetFileSystemEntries(dir).Length, "写入测试不得留下残留");
+                Assert.Equal(dir, result.Outputs["write_tested_dir"], "目录已存在时应直接测它");
+                Assert.Equal("false", result.Outputs["write_substituted"], "不该报告为替换测试");
+            }
+            finally
+            {
+                try
+                {
+                    Directory.Delete(dir, recursive: true);
+                }
+                catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+                {
+                    // 同上。
+                }
+            }
         });
 
         h.Case("AC-41", "detect.deps：返回缺失项清单", () =>

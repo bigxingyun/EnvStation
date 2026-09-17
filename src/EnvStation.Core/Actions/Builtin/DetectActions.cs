@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using System.Globalization;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -545,6 +545,9 @@ internal sealed class DetectDiskAction : ActionBase
             Path_("path", true, "要检查的目录"),
             new ParameterSpec("required_bytes", ParameterType.Integer, false,
                 "所需的可用字节数；给出后会直接判断是否足够", Minimum: 0),
+            new ParameterSpec("require_writable", ParameterType.Boolean, false,
+                "为真时，真实写入测试未通过即判为失败；为假时只报告不拦截",
+                DefaultValue: "false"),
         ]);
 
     /// <inheritdoc />
@@ -599,9 +602,11 @@ internal sealed class DetectDiskAction : ActionBase
         var required = arguments.GetInt64("required_bytes", 0);
         var enough = required <= 0 || available >= required;
 
-        // 可写性探测：在目标目录（存在时）创建一个极小的临时文件后立即删除。
-        // 刻意不做"创建目录再删除"——那会留下空目录，属于本工具的副作用，而探测动作不应有副作用。
-        var writable = ProbeWritable(Directory.Exists(full) ? full : probePath);
+        // 真实写入-删除测试（需求 V6）。**必须走 TargetWriteProbe 这一份实现**：
+        // 这个动作里原本就有一段自己的可写性探测，与安装前置检查要用的判定是同一件事；
+        // 本仓库已经吃过"两处各写一套判据"的亏（D-44：检查说可用、执行时说找不到）。
+        var write = Diagnostics.TargetWriteProbe.Run(Directory.Exists(full) ? full : probePath);
+        var requireWritable = arguments.GetBoolean("require_writable", false);
 
         var outputs = Outputs(
             ("drive", root),
@@ -611,7 +616,10 @@ internal sealed class DetectDiskAction : ActionBase
             ("available_bytes", available.ToString(CultureInfo.InvariantCulture)),
             ("required_bytes", required.ToString(CultureInfo.InvariantCulture)),
             ("enough", enough ? "true" : "false"),
-            ("writable", writable ? "true" : "false"),
+            ("writable", write.Ok ? "true" : "false"),
+            ("write_reason", write.ToLine()),
+            ("write_tested_dir", write.TestedDirectory),
+            ("write_substituted", write.Substituted ? "true" : "false"),
             ("probed_path", probePath));
 
         if (!enough)
@@ -621,27 +629,17 @@ internal sealed class DetectDiskAction : ActionBase
             return Fail(EnvStationErrorCodes.PreflightDiskShort, message);
         }
 
-        var ok = $"磁盘 {root}（{drive.DriveFormat}）可用 {Mb(available)}，可写：{(writable ? "是" : "否")}。";
+        // V6：写入测试未通过即阻断——但只在调用方要求时。做全局检测时一个不可写的目录
+        // 不该让整轮检测失败，那时"可写：否"本身就是结论。
+        if (requireWritable && !write.Ok)
+        {
+            context.ReportProgress(100, write.ToLine());
+            return Fail(EnvStationErrorCodes.PreflightPathNotWritable, write.ToLine());
+        }
+
+        var ok = $"磁盘 {root}（{drive.DriveFormat}）可用 {Mb(available)}，可写：{(write.Ok ? "是" : "否")}。";
         context.ReportProgress(100, ok);
         return Ok(ok, outputs);
-    }
-
-    private static bool ProbeWritable(string directory)
-    {
-        try
-        {
-            var probe = Path.Combine(directory, ".envstation-write-probe-" + Guid.NewGuid().ToString("N")[..8]);
-            using (var stream = new FileStream(probe, FileMode.CreateNew, FileAccess.Write, FileShare.None, 1, FileOptions.DeleteOnClose))
-            {
-                stream.WriteByte(0);
-            }
-
-            return true;
-        }
-        catch (Exception ex) when (ex is UnauthorizedAccessException or IOException or NotSupportedException)
-        {
-            return false;
-        }
     }
 
     private static string Mb(long bytes) => $"{bytes / 1024.0 / 1024.0:F1} MB";

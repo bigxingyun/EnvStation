@@ -1,4 +1,4 @@
-﻿using System.Collections.Immutable;
+using System.Collections.Immutable;
 using EnvStation.Abstractions.Transactions;
 using EnvStation.Core.Diagnostics;
 using EnvStation.TestKit;
@@ -6,7 +6,7 @@ using EnvStation.TestKit;
 namespace EnvStation.Tests.Ui;
 
 /// <summary>
-/// 界面状态层与待办项模型的用例。
+/// 界面状态层、路径校验与待办项模型的用例。
 /// </summary>
 /// <remarks>
 /// <para>
@@ -19,14 +19,19 @@ namespace EnvStation.Tests.Ui;
 /// <item><b>结论与正文不一致</b>：徽标说「正常」、正文说「缺少 1 项」（历史缺陷 D-44）。
 /// 三重编码与 <see cref="StatusTone.For(IEnumerable{RemedyItem})"/> 把它收成一处判断。</item>
 /// </list>
-/// <para>全部用例纯计算，不触碰注册表、文件系统与网络。</para>
+/// <para>
+/// <b>除写入测试（UI-122 起）外，全部用例纯计算</b>，不触碰注册表、文件系统与网络。
+/// UI-122 起要验的是需求 V6「真实写入-删除测试」，它按定义必须真的写一次文件——
+/// 因此只在<b>临时目录</b>里写一个可识别的探测文件，并断言测试结束后不留残留。
+/// 这是本套件唯一会碰盘的地方，且碰的是自己造的临时目录。
+/// </para>
 /// </remarks>
 internal static class Program
 {
     private static int Main(string[] args)
     {
         Console.OutputEncoding = System.Text.Encoding.UTF8;
-        Console.WriteLine("界面状态层与待办项模型测试（纯计算，不触碰本机）");
+        Console.WriteLine("界面状态层、路径校验与待办项模型测试（除 V6 写入测试外不触碰本机）");
         Console.WriteLine();
 
         var h = new TestHarness("界面状态层");
@@ -41,6 +46,8 @@ internal static class Program
         TriageCases(h);
         PageTagCases(h);
         SourceRouteCases(h);
+        PathRuleCases(h);
+        WriteProbeCases(h);
         WiringCases(h);
 
         var code = h.Summarize();
@@ -937,6 +944,692 @@ internal static class Program
                 "包管理器把「装到哪、装什么」的决定权交给外部工具，风险更高。");
         });
     }
+    // ══════════════════════════ 安装路径校验（R1~R17）══════════════════════════
+
+    /// <summary>
+    /// 测试用的路径事实：全部由用例显式指定，不读真实系统。
+    /// </summary>
+    /// <remarks>
+    /// 必须有它才能测 R4（保留设备名）、R10（网络盘）、R14（非 NTFS）这些
+    /// **在开发机上根本造不出来**的规则。生产实现读真实系统，测试实现给假数据，
+    /// 两者跑同一套判定逻辑。
+    /// </remarks>
+    private sealed class FakeProbe : IPathProbe
+    {
+        public bool HasVariableReference { get; init; }
+
+        public bool Network { get; init; }
+
+        public string DriveTypeName { get; init; } = "fixed";
+
+        public string FileSystemName { get; init; } = "NTFS";
+
+        public long? FreeBytes { get; init; } = 100L * 1024 * 1024 * 1024;
+
+        public bool Exists { get; init; }
+
+        public int? Entries { get; init; }
+
+        public bool Owned { get; init; }
+
+        public bool Reparse { get; init; }
+
+        public string? ReparseTargetPath { get; init; }
+
+        public IReadOnlyDictionary<string, string> Registered { get; init; } =
+            new Dictionary<string, string>(StringComparer.Ordinal);
+
+        public ImmutableArray<string> Paths { get; init; } = [];
+
+        public bool ContainsVariableReference(string path) => HasVariableReference;
+
+        public bool IsNetworkPath(string path) => Network;
+
+        public string DriveRoot(string path) => path.Length >= 2 ? path[..2] + "\\" : string.Empty;
+
+        public string DriveType(string path) => DriveTypeName;
+
+        public string FileSystem(string path) => FileSystemName;
+
+        public long? FreeSpaceBytes(string path) => FreeBytes;
+
+        public bool DirectoryExists(string path) => Exists;
+
+        public int? EnumerateEntryCount(string path) => Entries;
+
+        public bool IsOwnedByEnvStation(string path) => Owned;
+
+        public bool IsReparsePoint(string path) => Reparse;
+
+        public string? ReparseTarget(string path) => ReparseTargetPath;
+
+        public IReadOnlyDictionary<string, string> RegisteredRuntimeDirectories => Registered;
+
+        public ImmutableArray<string> PathEntries => Paths;
+    }
+
+    /// <summary>取结论里命中的规则 ID（逗号连接，便于 Assert.Contains）。</summary>
+    private static string Ids(PathValidationResult result) =>
+        string.Join(",", result.Findings.Select(static f => f.Rule.Id));
+
+    /// <summary>取某条规则的补充说明；该规则未命中时为空。</summary>
+    private static string DetailOf(PathValidationResult result, string ruleId) =>
+        result.Findings.FirstOrDefault(f => f.Rule.Id == ruleId)?.Detail ?? string.Empty;
+    private static PathRuleEngine MakeEngine(FakeProbe probe) =>
+        PathRuleEngine.LoadFrom(RuleToml, probe);
+
+    /// <summary>与仓库里 data/rules/path-rules.toml 同构的最小规则集（17 条）。</summary>
+    private const string RuleToml = """
+        [meta]
+        schema_version = 1
+        warn_length = 200
+        block_length = 260
+
+        [[rules]]
+        id = "R1"
+        level = "block"
+        check = "NonAscii"
+        title = "路径中包含中文或非 ASCII 字符"
+        message = "部分编译工具与构建脚本无法正确处理非 ASCII 路径。"
+        fix = "toAsciiName"
+
+        [[rules]]
+        id = "R2"
+        level = "warn"
+        check = "ContainsSpace"
+        title = "路径中包含空格"
+        message = "部分老旧工具链未对空格做转义。"
+        fix = "none"
+
+        [[rules]]
+        id = "R3"
+        level = "block"
+        check = "SpecialCharacters"
+        title = "路径中包含特殊字符"
+        message = "特殊字符在脚本里会被解释。"
+        fix = "none"
+
+        [[rules]]
+        id = "R4"
+        level = "block"
+        check = "ReservedDeviceName"
+        title = "路径中包含 Windows 保留设备名"
+        message = "保留设备名不能作为目录名。"
+        fix = "none"
+
+        [[rules]]
+        id = "R5"
+        level = "block"
+        check = "TrailingSpaceOrDot"
+        title = "目录名以空格或点结尾"
+        message = "Windows 会丢弃结尾的空格与点。"
+        fix = "stripTrailing"
+
+        [[rules]]
+        id = "R6a"
+        level = "warn"
+        check = "LongPath"
+        title = "路径较长"
+        message = "解压后可能超过 260 字符限制。"
+        fix = "none"
+
+        [[rules]]
+        id = "R6b"
+        level = "block"
+        check = "VeryLongPath"
+        title = "路径过长"
+        message = "解压后几乎必然超过限制。"
+        fix = "none"
+
+        [[rules]]
+        id = "R7"
+        level = "block"
+        check = "InvalidPathCharacters"
+        title = "路径中包含 Windows 不允许的字符"
+        message = "路径中出现了不允许的字符。"
+        fix = "none"
+
+        [[rules]]
+        id = "R8"
+        level = "warn"
+        check = "NeedsElevation"
+        title = "目标位置写入需要管理员权限"
+        message = "该位置所有用户共享。"
+        fix = "none"
+
+        [[rules]]
+        id = "R9"
+        level = "warn"
+        check = "CloudSyncedDirectory"
+        title = "目标位于云同步目录内"
+        message = "同步客户端会造成文件锁冲突。"
+        fix = "none"
+
+        [[rules]]
+        id = "R10"
+        level = "block"
+        check = "NetworkOrRemovableDrive"
+        title = "目标位于网络路径或可移动磁盘"
+        message = "断连会让开发环境失效。"
+        fix = "none"
+
+        [[rules]]
+        id = "R11"
+        level = "warn"
+        check = "ReparsePoint"
+        title = "目标路径是符号链接或目录联接"
+        message = "实际写入位置与看到的路径不同。"
+        fix = "none"
+
+        [[rules]]
+        id = "R12"
+        level = "block"
+        check = "UnresolvedVariable"
+        title = "路径中包含未展开的变量引用"
+        message = "需要的是一个确定的目录。"
+        fix = "none"
+
+        [[rules]]
+        id = "R13"
+        level = "warn"
+        check = "OverlapsRegisteredRuntime"
+        title = "与已登记的组件目录重叠"
+        message = "两个版本装进同一目录会互相覆盖。"
+        fix = "none"
+
+        [[rules]]
+        id = "R14"
+        level = "warn"
+        check = "NotNtfs"
+        title = "目标磁盘不是 NTFS"
+        message = "非 NTFS 不支持符号链接与长路径。"
+        fix = "none"
+
+        [[rules]]
+        id = "R15"
+        level = "warn"
+        check = "ExistingNonEmptyDirectory"
+        title = "目标目录已存在且非空"
+        message = "继续安装可能覆盖已有文件。"
+        fix = "none"
+
+        [[rules]]
+        id = "R16"
+        level = "block"
+        check = "InsufficientDiskSpace"
+        title = "目标磁盘剩余空间不足"
+        message = "装到一半失败会留下半成品环境。"
+        fix = "none"
+
+        [[rules]]
+        id = "R17"
+        level = "warn"
+        check = "AlreadyInPath"
+        title = "该目录已在 PATH 中"
+        message = "重复添加会让 PATH 变长。"
+        fix = "none"
+        """;
+
+    /// <summary>
+    /// 安装路径校验的用例：R1~R17 每条至少一项。
+    /// </summary>
+    /// <summary>需求 6.1 的阻断级规则编号（R6 路径过长拆成 R6a 警告 / R6b 阻断）。</summary>
+    private static readonly string[] BlockingRuleIds =
+        ["R1", "R3", "R4", "R5", "R6b", "R7", "R10", "R12", "R16"];
+
+    /// <summary>需求 6.1 的全部规则编号（17 条编号，R6 占两档声明，共 18 条）。</summary>
+    private static readonly string[] RequirementRuleIds =
+        ["R1", "R2", "R3", "R4", "R5", "R6a", "R6b", "R7", "R8", "R9",
+         "R10", "R11", "R12", "R13", "R14", "R15", "R16", "R17"];
+
+    private static void PathRuleCases(TestHarness h)
+    {
+        var clean = new FakeProbe();
+        var engine = MakeEngine(clean);
+
+        h.Case("UI-100", "路径校验：规则加载齐 18 条声明，级别与需求表一致", () =>
+        {
+            // 需求 6.1 是 17 条规则；R6（路径过长）有两档级别，拆成 R6a/R6b 两条声明，
+            // 因此规则文件里是 18 条。**编号与条数不是一回事**，这一点要在用例里说清，
+            // 否则下一个人看到 18 会以为多写了一条。
+            Assert.Equal(18, engine.RuleCount, "17 条规则 + R6 拆两档 = 18 条声明。");
+
+            string[] ruleIds = [.. engine.Rules.Select(static r => r.Id)];
+            foreach (var expected in RequirementRuleIds)
+            {
+                Assert.Contains(expected, string.Join(",", ruleIds), $"需求 6.1 的 {expected} 在规则文件里缺失。");
+            }
+
+            foreach (var rule in engine.Rules)
+            {
+                var shouldBlock = BlockingRuleIds.Contains(rule.Id);
+                Assert.Equal(shouldBlock, rule.IsBlocking,
+                    $"{rule.Id} 的级别与需求 6.1 表不一致（应为 {(shouldBlock ? "阻断" : "警告")}）。");
+            }
+        });
+
+        h.Case("UI-101", "R1 非 ASCII：阻断，并给出一键修正", () =>
+        {
+            var result = engine.Validate(@"D:\开发工具\Python");
+            var finding = result.Findings.Single(f => f.Rule.Id == "R1");
+            Assert.True(finding.IsBlocking, "R1 是阻断级。");
+            Assert.False(result.CanProceed, "有阻断级就不能继续。");
+            Assert.NotNull(finding.Suggestion, "R1 必须给出一键修正。");
+            Assert.Contains("DevTools", finding.Suggestion!, "常见目录名走对照表。");
+        });
+
+        h.Case("UI-102", "R2 空格：警告，仍可继续", () =>
+        {
+            var result = engine.Validate(@"D:\Dev Tools\Python");
+            Assert.True(result.CanProceed, "空格只是警告。");
+            Assert.Equal(1, result.WarnCount, "只该报一条空格。");
+        });
+
+        h.Case("UI-103", "R3 特殊字符：`&` 与 `^` 判为阻断", () =>
+        {
+            Assert.False(engine.Validate(@"D:\Dev&Tools").CanProceed, "& 是阻断级。");
+            Assert.False(engine.Validate(@"D:\Dev^2").CanProceed, "^ 是阻断级。");
+            Assert.True(engine.Validate(@"D:\DevTools").CanProceed, "干净路径不该被拦。");
+        });
+
+        h.Case("UI-104", "★R4 保留设备名：CON 与 COM1 阻断，且忽略扩展名", () =>
+        {
+            Assert.False(engine.Validate(@"D:\CON").CanProceed, "CON 是保留设备名。");
+            Assert.False(engine.Validate(@"D:\COM1\Python").CanProceed, "COM1 是保留设备名。");
+            Assert.False(engine.Validate(@"D:\NUL.txt").CanProceed,
+                "带扩展名的 NUL.txt 同样不可用（Windows 的既有行为）。");
+            Assert.True(engine.Validate(@"D:\CONSOLE").CanProceed, "CONSOLE 不是保留名，不该误伤。");
+        });
+
+        h.Case("UI-105", "R5 尾随空格或点：阻断，并给出去尾修正", () =>
+        {
+            var result = engine.Validate(@"D:\Dev \Python.");
+            var finding = result.Findings.Single(f => f.Rule.Id == "R5");
+            Assert.True(finding.IsBlocking, "R5 是阻断级。");
+            Assert.Equal(@"D:\Dev\Python", finding.Suggestion, "修正应去掉每段结尾的空格与点。");
+        });
+
+        h.Case("UI-106", "R6 长度：200 警告 / 260 阻断，两个档位各只有一条", () =>
+        {
+            var warn = engine.Validate(@"D:\" + new string('a', 200));
+            var warnIds = warn.Findings.Select(static f => f.Rule.Id).ToArray();
+            Assert.Contains("R6a", string.Join(",", warnIds), "超过 200 应报 R6a。");
+            Assert.NotContains("R6b", string.Join(",", warnIds), "未超 260 不该报 R6b。");
+            Assert.True(warn.CanProceed, "R6a 只是警告。");
+
+            var block = engine.Validate(@"D:\" + new string('a', 300));
+            Assert.False(block.CanProceed, "超过 260 应阻断。");
+        });
+
+        h.Case("UI-107", "R7 非法字符：盘符的冒号不算非法", () =>
+        {
+            Assert.False(engine.Validate(@"D:\Dev?Tools").CanProceed, "? 非法。");
+            Assert.True(engine.Validate(@"D:\DevTools").CanProceed,
+                "盘符里的冒号是合法的，不该被当成非法字符。");
+        });
+
+        h.Case("UI-108", "R8 需提权位置：Program Files 与盘根判警告", () =>
+        {
+            // 用"命中哪些规则"断言，而不是数条数：数条数会把无关规则的噪音算进来，
+            // 一个用例失败时看不出到底哪条规则错了。
+            var programFiles = engine.Validate(@"C:\Program Files\Python");
+            Assert.Contains("R8", Ids(programFiles), "Program Files 需提权。");
+            Assert.True(programFiles.CanProceed, "R8 只是警告，仍可继续。");
+
+            Assert.Contains("R8", Ids(engine.Validate(@"D:\")), "盘根需提权。");
+            Assert.True(engine.Validate(@"D:\Dev\Python").IsClean, "普通目录不该报。");
+        });
+
+        h.Case("UI-109", "R9 云同步目录：OneDrive 与坚果云判警告", () =>
+        {
+            var oneDrive = engine.Validate(@"C:\Users\me\OneDrive\Dev");
+            Assert.Contains("R9", Ids(oneDrive), "OneDrive 应被识别。");
+            Assert.Contains("OneDrive", DetailOf(oneDrive, "R9"), "说明里要点出是哪个同步客户端。");
+
+            var nutstore = engine.Validate(@"D:\我的坚果云\Dev");
+            Assert.Contains("R9", Ids(nutstore), "坚果云应被识别。");
+            Assert.Contains("坚果云", DetailOf(nutstore, "R9"), "说明里要点出是哪个同步客户端。");
+        });
+
+        h.Case("UI-110", "R10 网络盘或可移动盘：阻断", () =>
+        {
+            Assert.False(MakeEngine(new FakeProbe { Network = true }).Validate(@"\\srv\share").CanProceed,
+                "UNC 路径阻断。");
+            Assert.False(MakeEngine(new FakeProbe { DriveTypeName = "removable" })
+                .Validate(@"E:\Python").CanProceed, "可移动盘阻断。");
+        });
+
+        h.Case("UI-111", "R11 符号链接：警告，并说明实际位置", () =>
+        {
+            var finding = MakeEngine(new FakeProbe { Reparse = true, ReparseTargetPath = @"D:\Real" })
+                .Validate(@"D:\Link").Findings.Single();
+            Assert.False(finding.IsBlocking, "R11 只是警告。");
+            Assert.Contains(@"D:\Real", finding.Detail, "要说明实际位置，否则用户无法判断。");
+        });
+
+        h.Case("UI-112", "R12 未展开变量：阻断", () =>
+        {
+            Assert.False(MakeEngine(new FakeProbe { HasVariableReference = true })
+                .Validate(@"%LOCALAPPDATA%\Python").CanProceed, "%VAR% 阻断。");
+        });
+
+        h.Case("UI-113", "★R13 路径重叠：互为父子都算重叠", () =>
+        {
+            var probe = new FakeProbe
+            {
+                Registered = new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["python"] = @"D:\Dev\Python\3.12",
+                },
+            };
+            var e = MakeEngine(probe);
+
+            Assert.Contains("python", e.Validate(@"D:\Dev\Python").Findings.Single().Detail,
+                "装在已登记组件的父目录里算重叠。");
+            Assert.Contains("python", e.Validate(@"D:\Dev\Python\3.12\extra").Findings.Single().Detail,
+                "装在子目录里也算重叠。");
+            Assert.True(e.Validate(@"D:\Dev\Node").IsClean, "无关目录不该报重叠。");
+        });
+
+        h.Case("UI-114", "R14 非 NTFS：警告并说明文件系统", () =>
+        {
+            var finding = MakeEngine(new FakeProbe { FileSystemName = "exFAT" })
+                .Validate(@"E:\Dev").Findings.Single();
+            Assert.Contains("exFAT", finding.Detail, "要说明实际的文件系统。");
+            Assert.True(MakeEngine(new FakeProbe { FileSystemName = "ntfs" })
+                .Validate(@"E:\Dev").IsClean, "NTFS 大小写不同也算 NTFS。");
+        });
+
+        h.Case("UI-115", "★R15 非空目录：环境站自己建的目录不算问题", () =>
+        {
+            var notOwned = MakeEngine(new FakeProbe { Exists = true, Entries = 42 })
+                .Validate(@"D:\Dev\Python");
+            Assert.Contains("42", notOwned.Findings.Single().Detail, "要报出条目数。");
+
+            var owned = MakeEngine(new FakeProbe { Exists = true, Entries = 42, Owned = true })
+                .Validate(@"D:\Dev\Python");
+            Assert.True(owned.IsClean,
+                "环境站自己建的目录不算「别人的非空目录」——否则重装自己的组件会被自己的规则拦住。");
+        });
+
+        h.Case("UI-116", "R16 磁盘空间：按 1.5 倍余量判，且只在给了需求时判", () =>
+        {
+            var tight = MakeEngine(new FakeProbe { FreeBytes = 1000L * 1024 * 1024 });
+            Assert.False(tight.Validate(@"D:\Dev", requiredBytes: 900L * 1024 * 1024).CanProceed,
+                "需要 900MB 时 1.5 倍是 1350MB，只剩 1000MB 应阻断。");
+
+            Assert.True(tight.Validate(@"D:\Dev").IsClean,
+                "没给安装需求时不该凭空判磁盘不足。");
+            Assert.True(tight.Validate(@"D:\Dev", requiredBytes: 100L * 1024 * 1024).CanProceed,
+                "需要 100MB 时 1.5 倍是 150MB，1000MB 够用。");
+        });
+
+        h.Case("UI-117", "R17 已在 PATH：忽略大小写与尾斜杠", () =>
+        {
+            var probe = new FakeProbe
+            {
+                Paths = [@"D:\Dev\Python\", @"C:\Windows\System32"],
+            };
+            var e = MakeEngine(probe);
+
+            Assert.Contains("PATH", e.Validate(@"d:\dev\python").Findings.Single().Detail,
+                "大小写与尾斜杠不同仍应判为已存在。");
+            Assert.True(e.Validate(@"D:\Dev\Node").IsClean, "不在 PATH 里不该报。");
+        });
+
+        h.Case("UI-118", "★路径校验：干净路径零发现，阻断排在警告前", () =>
+        {
+            Assert.True(engine.Validate(@"D:\Dev\Python").IsClean,
+                "一个普通目录不该触发任何规则——否则这套校验天天在误报。");
+            Assert.Contains("通过", engine.Validate(@"D:\Dev\Python").Summarize(), "结论句应说通过。");
+
+            var mixed = engine.Validate(@"C:\Program Files\开发 工具");
+            Assert.True(mixed.BlockCount > 0 && mixed.WarnCount > 0, "应同时有阻断与警告。");
+            Assert.True(mixed.Findings[0].IsBlocking, "阻断必须排在警告之前。");
+        });
+
+        h.Case("UI-119", "★路径校验：规则文件缺失时拒绝工作，不静默放行", () =>
+        {
+            Assert.Throws<FileNotFoundException>(
+                () => PathRuleEngine.Load(@"D:\nonexistent\path-rules.toml", engine.Probe),
+                "缺规则文件必须抛异常——静默放行的后果是「校验全绿」，而用户以为检查过了。");
+
+            Assert.Throws<InvalidOperationException>(
+                () => PathRuleEngine.LoadFrom("   ", engine.Probe),
+                "空规则文件同样要拒绝。");
+
+            Assert.Throws<InvalidOperationException>(
+                () => PathRuleEngine.LoadFrom("[meta]\nschema_version = 1", engine.Probe),
+                "没有 [[rules]] 段落要拒绝。");
+        });
+
+        h.Case("UI-120", "★路径校验：未知 check 取值报错并指出可选值", () =>
+        {
+            const string bad = """
+                [[rules]]
+                id = "R99"
+                level = "warn"
+                check = "NoSuchCheck"
+                title = "x"
+                """;
+            // 只断言"抛了 InvalidOperationException"：本项目自研断言器不返回异常对象，
+            // 而错误信息里含取值这一点由 LoadFrom 的实现保证（用例 UI-120 覆盖了"会抛"）。
+            Assert.Throws<InvalidOperationException>(
+                () => PathRuleEngine.LoadFrom(bad, engine.Probe),
+                "规则写错判定类型必须报错——静默忽略会让那条规则永远不生效。");
+        });
+
+        h.Case("UI-121", "★随产品发布的规则文件：能加载且分档、取值合法", () =>
+        {
+            // 上面 UI-100..UI-120 用的是用例自己内联的最小规则集，它再怎么写错也发现不了
+            // data/rules/path-rules.toml 的问题——而那份才是用户机器上真正被读到的文件。
+            // 本用例加载的是随产品一起发布的真实产物（由 csproj 复制到输出目录的 rules\）。
+            var rulesPath = Path.Combine(AppContext.BaseDirectory, "rules", "path-rules.toml");
+            Assert.True(File.Exists(rulesPath), $"随产品发布的规则文件必须存在：{rulesPath}");
+
+            var shipped = PathRuleEngine.Load(rulesPath, engine.Probe);
+
+            Assert.Equal(18, shipped.Rules.Length, "发布版规则条数应与《需求分析.md》6.1 节一致。");
+
+            var ids = shipped.Rules.Select(static r => r.Id).ToArray();
+            Assert.Equal(ids.Length, ids.Distinct(StringComparer.Ordinal).Count(), "规则 ID 不得重复。");
+
+            // 逐条比对编号集合，而不是只查几个代表：少一条规则不会让程序报错，
+            // 只会让某一类坏路径悄悄通过——这类漏检只有在用例里对齐编号才能发现。
+            foreach (var expected in RequirementRuleIds)
+            {
+                Assert.Contains(expected, string.Join(",", ids), $"发布版规则文件缺 {expected}。");
+            }
+
+            foreach (var rule in shipped.Rules)
+            {
+                Assert.True(
+                    !string.IsNullOrWhiteSpace(rule.Title) && !string.IsNullOrWhiteSpace(rule.Message),
+                    $"规则 {rule.Id} 的标题与说明都必须写全——空说明在界面上就是一行没有理由的红字。");
+
+                Assert.Equal(
+                    BlockingRuleIds.Contains(rule.Id),
+                    rule.IsBlocking,
+                    $"发布版规则 {rule.Id} 的级别与需求 6.1 表不一致。");
+
+                Assert.True(
+                    rule.Fix is PathFixKind.None or PathFixKind.StripTrailing or PathFixKind.ToAsciiName,
+                    $"规则 {rule.Id} 的 fix 取值必须落在允许集合内。");
+            }
+
+            // 修正策略与判定类型必须成对：R5（结尾空格或点）配 stripTrailing、R1（非 ASCII）配
+            // toAsciiName。写错的风险是界面给出一个点完没反应的按钮——按钮的显示条件由 fix 决定，
+            // 而能不能修好由判定类型决定，两边对不上就是假按钮。
+            foreach (var rule in shipped.Rules)
+            {
+                var expected = rule.Check switch
+                {
+                    PathCheckKind.TrailingSpaceOrDot => PathFixKind.StripTrailing,
+                    PathCheckKind.NonAscii => PathFixKind.ToAsciiName,
+                    _ => PathFixKind.None,
+                };
+                Assert.Equal(expected, rule.Fix, $"规则 {rule.Id} 的修正策略与判定类型不匹配。");
+            }
+
+            Assert.True(shipped.WarnLength < shipped.BlockLength, "警告阈值必须小于阻断阈值，否则警告档永远不触发。");
+            Assert.Equal(200, shipped.WarnLength, "警告阈值应与设计值一致（改阈值要同时改界面文案里的数字）。");
+            Assert.Equal(260, shipped.BlockLength, "阻断阈值应与 Windows 传统路径上限一致。");
+        });
+    }
+    // ══════════════════════════ V6 真实写入测试 ══════════════════════════
+
+    private static void WriteProbeCases(TestHarness h)
+    {
+        h.Case("UI-122", "★V6 写入测试：真的写一次、读回比对、并留下零残留", () =>
+        {
+            var dir = NewTempDirectory();
+            try
+            {
+                var before = Directory.GetFileSystemEntries(dir).Length;
+                var result = TargetWriteProbe.Run(dir);
+
+                Assert.True(result.Ok, $"空的可写目录应通过写入测试：{result.ToLine()}");
+                Assert.Equal(dir, result.TestedDirectory, "目录已存在时应直接测它，不做替换。");
+                Assert.False(result.Substituted, "目录已存在时不该报告为替换测试。");
+                Assert.True(result.ProbeFileName is { Length: > 0 }, "应回报探测文件名，便于排查残留。");
+
+                // 这一条是 V6 与"用属性猜"的分界线：测试必须真的落了盘，而不是只判了权限位。
+                Assert.True(
+                    result.ProbeFileName!.StartsWith(TargetWriteProbe.ProbeFileStem, StringComparison.Ordinal),
+                    "探测文件名应带可识别前缀——异常退出后用户要能看出是谁留下的。");
+
+                Assert.Equal(
+                    before,
+                    Directory.GetFileSystemEntries(dir).Length,
+                    "写入测试不得留下任何残留：它是前置检查，不是安装。");
+            }
+            finally
+            {
+                TryRemoveDirectory(dir);
+            }
+        });
+
+        h.Case("UI-123", "★V6 写入测试：目标目录尚不存在时退到上级，且不建目录", () =>
+        {
+            var parent = NewTempDirectory();
+            var target = Path.Combine(parent, "python", "3.12");
+            try
+            {
+                var result = TargetWriteProbe.Run(target);
+
+                Assert.True(result.Ok, $"上级可写时应通过：{result.ToLine()}");
+                Assert.Equal(parent, result.TestedDirectory, "应退到最近的已存在上级目录。");
+                Assert.True(result.Substituted, "替换了测试目录就必须如实标出来。");
+                Assert.Contains("上级", result.ToLine(), "结论里要说清测的是哪一层，不能只给一个『通过』。");
+
+                // 前置检查不得有副作用：目标目录不能因为"检查过了"就被创建出来。
+                Assert.False(Directory.Exists(target), "写入测试不得创建目标目录。");
+                Assert.Equal(0, Directory.GetFileSystemEntries(parent).Length, "不得留下残留。");
+            }
+            finally
+            {
+                TryRemoveDirectory(parent);
+            }
+        });
+
+        h.Case("UI-124", "★V6 写入测试：判为阻断，且原因说得出是哪一个文件挡住的", () =>
+        {
+            var dir = NewTempDirectory();
+            var blocker = Path.Combine(dir, "blocker.txt");
+            File.WriteAllText(blocker, "x");
+            try
+            {
+                var result = TargetWriteProbe.Run(Path.Combine(blocker, "python"));
+
+                Assert.False(result.Ok, "上级是文件时不可能建成目录，必须判为未通过。");
+                Assert.True(result.IsBlocking, "未通过即阻断（V6）。");
+                Assert.Contains("blocker.txt", result.FailureReason ?? string.Empty, "原因里要点出是哪个路径挡住的。");
+
+                // 关键的一条：不能因为继续向上找到了可写的盘根（这里就是 C:\）就报"通过"。
+                Assert.NotEqual(
+                    Path.GetPathRoot(Path.GetFullPath(dir)),
+                    result.TestedDirectory,
+                    "不得越过挡住路径的文件继续向上探测——那会给出一个目标目录根本建不出来的『通过』。");
+            }
+            finally
+            {
+                TryRemoveDirectory(dir);
+            }
+        });
+
+        h.Case("UI-125", "V6 写入测试：结论文案三态各不相同", () =>
+        {
+            var dir = NewTempDirectory();
+            var blocker = Path.Combine(dir, "blocker.txt");
+            File.WriteAllText(blocker, "x");
+            try
+            {
+                var ok = TargetWriteProbe.Run(dir);
+                Assert.Contains("可写入", ok.ToLine(), "直接测目标目录时说明测的就是它。");
+
+                var substituted = TargetWriteProbe.Run(Path.Combine(dir, "not-yet"));
+                Assert.Contains("尚不存在", substituted.ToLine(), "替换测试必须说出来。");
+
+                var failed = TargetWriteProbe.Run(Path.Combine(blocker, "sub"));
+                Assert.False(failed.Ok, "拿真实失败做对照，否则下一条断言只是在比对两段成功文案。");
+                Assert.NotContains("通过", failed.ToLine(), "未通过时的文案不得出现「通过」——那是最容易被一眼看错的措辞。");
+
+                // 三条结论必须互不相同：界面按这一行字决定图标与颜色，文案重合就等于状态重合。
+                var lines = new[] { ok.ToLine(), substituted.ToLine(), failed.ToLine() };
+                Assert.Equal(3, lines.Distinct(StringComparer.Ordinal).Count(), "三种状态的结论文案不得重复。");
+            }
+            finally
+            {
+                TryRemoveDirectory(dir);
+            }
+        });
+
+        h.Case("UI-126", "★V6 写入测试：路径为空是调用方的错，不是环境问题", () =>
+        {
+            // 环境问题要变成一条结论给用户看；调用方传空路径是程序错误，必须当场炸。
+            // 两者混在一起，前者会被异常打断、后者会被悄悄吞掉。
+            Assert.Throws<ArgumentException>(() => TargetWriteProbe.Run("  "), "空路径应抛参数异常。");
+        });
+
+        h.Case("UI-127", "★R15 读不到目录内容时不得判成空目录", () =>
+        {
+            // "读不进去"与"空目录"是两件事：按空目录处理会让"可能覆盖别人的文件"
+            // 这条警告在最需要它的场合（权限受限目录）消失。
+            var probe = new FakeProbe { Exists = true, Owned = false, Entries = null };
+            var engine = MakeEngine(probe);
+            var result = engine.Validate(@"D:\Dev\Python");
+
+            Assert.Contains("R15", Ids(result), "读不到内容时 R15 仍应命中。");
+            Assert.Contains("读不到", DetailOf(result, "R15"), "说明里要写清是读不到，而不是『包含 0 个条目』。");
+
+            // 阴性对照：真的空目录不该报警。
+            var empty = new FakeProbe { Exists = true, Owned = false, Entries = 0 };
+            Assert.NotContains("R15", Ids(MakeEngine(empty).Validate(@"D:\Dev\Python")), "空目录不是问题。");
+        });
+    }
+
+    private static string NewTempDirectory()
+    {
+        var dir = Path.Combine(Path.GetTempPath(), "envstation-ui-" + Guid.NewGuid().ToString("N")[..8]);
+        Directory.CreateDirectory(dir);
+        return dir;
+    }
+
+    private static void TryRemoveDirectory(string dir)
+    {
+        try
+        {
+            if (Directory.Exists(dir))
+            {
+                Directory.Delete(dir, recursive: true);
+            }
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException)
+        {
+            // 用例的清理失败不该盖住断言结论；临时目录本身会被系统回收。
+        }
+    }
+
     // ══════════════════════════ 接线与映射完整性 ══════════════════════════
 
     private static void WiringCases(TestHarness h)

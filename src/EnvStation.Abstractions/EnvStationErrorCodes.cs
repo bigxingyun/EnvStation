@@ -1,4 +1,4 @@
-﻿namespace EnvStation.Abstractions;
+namespace EnvStation.Abstractions;
 
 /// <summary>
 /// 环境站统一错误码。
@@ -37,6 +37,9 @@ public static class EnvStationErrorCodes
     public const string PreflightOsTooOld = "E_PREFLIGHT_OS_TOO_OLD";
     public const string PreflightDiskShort = "E_PREFLIGHT_DISK_SHORT";
     public const string PreflightArchMismatch = "E_PREFLIGHT_ARCH_MISMATCH";
+
+    /// <summary>真实写入-删除测试未通过（需求 6.1 的 V6）。</summary>
+    public const string PreflightPathNotWritable = "E_PREFLIGHT_PATH_NOT_WRITABLE";
 
     // ── 网络域 ──
     public const string NetUnreachable = "E_NET_UNREACHABLE";

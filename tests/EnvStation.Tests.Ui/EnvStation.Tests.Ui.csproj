@@ -11,4 +11,16 @@
     <ProjectReference Include="..\EnvStation.TestKit\EnvStation.TestKit.csproj" />
   </ItemGroup>
 
+  <!--
+    把随产品发布的规则文件复制到测试输出目录，供用例**校验真实产物**。
+    为什么不用测试里内联的那份规则集：内联的那份是用例自己写的，它再怎么写错也不会发现
+    data/rules/path-rules.toml 有问题——而那份才是真正会被用户程序读到的。
+    这与令牌表的处理同理：生成物与源头要做机械比对，不能各自活一遍。
+  -->
+  <ItemGroup>
+    <None Include="..\..\data\rules\path-rules.toml"
+          Link="rules\path-rules.toml"
+          CopyToOutputDirectory="PreserveNewest" />
+  </ItemGroup>
+
 </Project>

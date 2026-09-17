@@ -1,0 +1,174 @@
+# 环境站 EnvStation · 安装路径校验规则
+#
+# 为什么要外置成数据文件（需求 6.1 的 V5）：规则会随工具链与 Windows 版本变化
+# （新出现一个保留设备名、某一个工具修好了对空格的转义、某个编辑器开始拒绝中文路径），
+# 而这些变化不该要求用户等一个新版本的程序。
+#
+# 引擎在**读不到本文件时会拒绝启动并说明缺哪个文件**，不静默放行——
+# 静默放行的后果是"校验全绿"，而用户以为已经检查过了。
+#
+# 字段说明：
+#   id        规则编号，与《需求分析.md》6.1 节逐条对应，出现在发现项里供用户搜索
+#   level     block = 阻断（禁止继续） / warn = 警告（可继续，最终确认页再次汇总）
+#   check     判定类型，取值见 PathRuleEngine 的 CheckKind（本字段是枚举名）
+#   title     一句话结论（界面标题行）
+#   message   现象说明（含具体对象与数量）
+#   fix       一键修正策略名（可空）：none / stripTrailing / toAsciiName
+#   param     判定类型的参数（部分规则需要）
+#
+# 说明文案口径按《文案规范.md》：先事实、后处置、不解释设计动机、不用「请」「您」。
+
+[meta]
+schema_version = 1
+# 超过这个长度开始警告（R6）
+warn_length = 200
+# 超过这个长度直接阻断（R6）
+block_length = 260
+
+# ── 阻断级 ──────────────────────────────────────────────────────────
+
+[[rules]]
+id = "R1"
+level = "block"
+check = "NonAscii"
+title = "路径中包含中文或非 ASCII 字符"
+message = "部分编译工具与构建脚本无法正确处理非 ASCII 路径，会导致安装失败或运行时异常。"
+fix = "toAsciiName"
+
+[[rules]]
+id = "R3"
+level = "block"
+check = "SpecialCharacters"
+title = "路径中包含特殊字符"
+message = "特殊字符在脚本与命令行里会被解释：`%` 被当作环境变量引用，`&` 与 `^` 会引起解析错误。"
+fix = "none"
+
+[[rules]]
+id = "R4"
+level = "block"
+check = "ReservedDeviceName"
+title = "路径中包含 Windows 保留设备名"
+message = "CON、PRN、AUX、NUL、COM1-9、LPT1-9 是 Windows 保留设备名，不能作为目录名。"
+fix = "none"
+
+[[rules]]
+id = "R5"
+level = "block"
+check = "TrailingSpaceOrDot"
+title = "目录名以空格或点结尾"
+message = "Windows 在解析路径时会丢弃结尾的空格与点，导致实际目录与预期不一致。"
+fix = "stripTrailing"
+
+[[rules]]
+id = "R7"
+level = "block"
+check = "InvalidPathCharacters"
+title = "路径中包含 Windows 不允许的字符"
+message = "路径中出现了 `<` `>` `:` `\"` `|` `?` `*` 等字符。"
+fix = "none"
+
+[[rules]]
+id = "R10"
+level = "block"
+check = "NetworkOrRemovableDrive"
+title = "目标位于网络路径或可移动磁盘"
+message = "盘符变化或断连会让整个开发环境失效。"
+fix = "none"
+
+[[rules]]
+id = "R12"
+level = "block"
+check = "UnresolvedVariable"
+title = "路径中包含未展开的变量引用"
+message = "路径里的 `%...%` 会被当作环境变量引用，而这里需要的是一个确定的目录。"
+fix = "none"
+
+[[rules]]
+id = "R16"
+level = "block"
+check = "InsufficientDiskSpace"
+title = "目标磁盘剩余空间不足"
+message = "剩余空间低于本次安装需求的一点五倍，装到一半失败会留下半成品环境。"
+fix = "none"
+
+# ── 警告级 ──────────────────────────────────────────────────────────
+
+[[rules]]
+id = "R2"
+level = "warn"
+check = "ContainsSpace"
+title = "路径中包含空格"
+message = "部分老旧工具链未对空格做转义，可能在链接或调用外部命令时报错。"
+fix = "none"
+
+[[rules]]
+id = "R6a"
+level = "warn"
+check = "LongPath"
+title = "路径较长"
+message = "压缩包解压后可能超过 Windows 传统的 260 字符限制，导致文件写入失败。"
+fix = "none"
+
+[[rules]]
+id = "R6b"
+level = "block"
+check = "VeryLongPath"
+title = "路径过长"
+message = "解压后几乎必然超过 260 字符限制。"
+fix = "none"
+
+[[rules]]
+id = "R8"
+level = "warn"
+check = "NeedsElevation"
+title = "目标位置写入需要管理员权限"
+message = "该位置所有用户共享，写入需要提权；将来清理与迁移也更麻烦。"
+fix = "none"
+
+[[rules]]
+id = "R9"
+level = "warn"
+check = "CloudSyncedDirectory"
+title = "目标位于云同步目录内"
+message = "同步客户端会造成文件锁冲突与版本错乱，构建中间产物尤其容易被反复上传。"
+fix = "none"
+
+[[rules]]
+id = "R11"
+level = "warn"
+check = "ReparsePoint"
+title = "目标路径是符号链接或目录联接"
+message = "实际写入位置与看到的路径不同，卸载或迁移时容易只处理到链接本身。"
+fix = "none"
+
+[[rules]]
+id = "R13"
+level = "warn"
+check = "OverlapsRegisteredRuntime"
+title = "与已登记的组件目录重叠"
+message = "两个版本装进同一目录会互相覆盖文件。"
+fix = "none"
+
+[[rules]]
+id = "R14"
+level = "warn"
+check = "NotNtfs"
+title = "目标磁盘不是 NTFS"
+message = "非 NTFS 不支持符号链接与长路径，部分功能会受限。"
+fix = "none"
+
+[[rules]]
+id = "R15"
+level = "warn"
+check = "ExistingNonEmptyDirectory"
+title = "目标目录已存在且非空"
+message = "继续安装可能覆盖其中已有的文件。"
+fix = "none"
+
+[[rules]]
+id = "R17"
+level = "warn"
+check = "AlreadyInPath"
+title = "该目录已在 PATH 中"
+message = "重复添加会让 PATH 变长，并让命令解析顺序更难判断。"
+fix = "none"
