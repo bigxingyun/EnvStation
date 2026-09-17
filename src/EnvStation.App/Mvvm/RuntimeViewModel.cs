@@ -1,4 +1,4 @@
-using EnvStation.Core.Diagnostics;
+﻿using EnvStation.Core.Diagnostics;
 
 namespace EnvStation.App.Mvvm;
 
@@ -57,6 +57,7 @@ internal sealed record RuntimeStatus(
 internal sealed class RuntimeViewModel : ViewModelBase
 {
     private readonly List<RuntimeStatus> _statuses = [];
+    private System.Collections.Immutable.ImmutableArray<PackageManagerAvailability> _packageManagers = [];
     private PageState<IReadOnlyList<RuntimeStatus>> _state = PageState<IReadOnlyList<RuntimeStatus>>.Idle;
     private int _scanned;
     private int _total;
@@ -82,8 +83,29 @@ internal sealed class RuntimeViewModel : ViewModelBase
     /// <summary>总数。</summary>
     internal int Total => _total;
 
+    /// <summary>本机包管理器探测结果（供安装流程复用，避免再探一次）。</summary>
+    internal System.Collections.Immutable.ImmutableArray<PackageManagerAvailability> PackageManagers => _packageManagers;
+
     /// <summary>检出的运行时数量。</summary>
     internal int FoundCount => _statuses.Count(static s => s.Found);
+
+    /// <summary>本机包管理器状况（一行中文事实）。</summary>
+    /// <remarks>
+    /// 探测走 <see cref="PackageManagerProbe"/>，它复用安装动作自己的解析器——
+    /// 判定与执行必须是同一套路径规则，否则会出现「检查说可用、执行说找不到」。
+    /// </remarks>
+    internal string PackageManagerSummary { get; private set; } = string.Empty;
+
+    /// <summary>实际会被使用的包管理器名；无可用时为空。</summary>
+    /// <remarks>
+    /// 同时装了 winget 与 choco 时，「由它负责校验」里的"它"指谁是不清楚的。
+    /// 判定层已按优先级选定第一个可用的，这里把它说出来——
+    /// 用户需要知道"这次到底会调哪个工具"，而不只是"有工具可用"。
+    /// </remarks>
+    internal string SelectedPackageManager { get; private set; } = string.Empty;
+
+    /// <summary>是否能通过包管理器安装（决定界面上怎么措辞）。</summary>
+    internal bool CanInstallViaPackageManager { get; private set; }
 
     /// <summary>
     /// 逐个检测全部运行时。
@@ -106,6 +128,16 @@ internal sealed class RuntimeViewModel : ViewModelBase
         }
 
         State = PageState<IReadOnlyList<RuntimeStatus>>.Loading;
+
+        // 先探包管理器：它决定"能不能装"，是用户在看完检测结果之后的第一个问题。
+        var managers = PackageManagerProbe.ProbeAll();
+        _packageManagers = managers;
+        PackageManagerSummary = PackageManagerProbe.Describe(managers);
+        CanInstallViaPackageManager = managers.Any(static m => m.IsAvailable);
+        SelectedPackageManager = managers.FirstOrDefault(static m => m.IsAvailable)?.Manager ?? string.Empty;
+        Raise(nameof(PackageManagerSummary));
+        Raise(nameof(SelectedPackageManager));
+        Raise(nameof(CanInstallViaPackageManager));
 
         foreach (var entry in RuntimeCatalogGroups.AllEntries)
         {

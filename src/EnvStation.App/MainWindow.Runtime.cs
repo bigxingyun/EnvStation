@@ -123,6 +123,18 @@ internal sealed partial class MainWindow
         verdictHost.Children.Add(AppControls.StatusBadge(
             viewModel.FoundCount > 0 ? StatusTone.Success : StatusTone.Neutral,
             $"检出 {viewModel.FoundCount} / {viewModel.Total} 项"));
+
+        // 安装通道：如实说明这台机器上"装东西"走哪条路。
+        //
+        // 放在这里而不是藏在安装向导里：用户看到"未检测到 Python"之后，
+        // 下一个问题必然是"那我能装吗"。答案取决于本机有没有包管理器——
+        // 现在直接给出来，而不是等他点进安装流程再告诉他走不通。
+        verdictHost.Children.Add(UiKit.Body(
+            viewModel.CanInstallViaPackageManager
+                ? $"{viewModel.PackageManagerSummary}安装时会使用 {viewModel.SelectedPackageManager}，下载与完整性校验由它负责。"
+                : viewModel.PackageManagerSummary,
+            secondary: true));
+
         verdictHost.Children.Add(UiKit.Body(
             $"清单共 {viewModel.Total} 项。未检出的条目表示本机尚未安装，不是错误。",
             secondary: true));
