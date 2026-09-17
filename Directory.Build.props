@@ -1,0 +1,61 @@
+﻿<Project>
+
+  <!--
+    环境站 EnvStation — 仓库级构建配置 (repo-wide build configuration)
+
+    统一 TargetFramework / 语言版本 / 分析器严格度。
+    目标：所有工程共享同一套质量基线，避免各工程各写一遍。
+
+    注意：XML 文件顶部不可使用 '#' 注释（会导致 MSB4024）。
+  -->
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <LangVersion>12.0</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <!--
+    不启用不变全球化（InvariantGlobalization）。
+    它会抹掉区域性信息，界面与 CLI 上会直接看到 "Invariant Language (Invariant Country)"
+    这种字样，日期/数字也不按用户区域格式化；而本产品要在「概览」里显示系统区域、要按中文习惯排字。
+    代价是发布产物会带上 ICU（体积略增），这个代价我们接受。
+  -->
+  <InvariantGlobalization>false</InvariantGlobalization>
+
+    <!-- 质量基线：警告即错误（对应 AOT-2 裁剪警告为错误、DL 依赖规则） -->
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <EnforceCodeStyleInBuild>true</EnforceCodeStyleInBuild>
+    <AnalysisLevel>latest-recommended</AnalysisLevel>
+
+    <!-- 可复现构建（对应 BLD-20） -->
+    <Deterministic>true</Deterministic>
+    <ContinuousIntegrationBuild Condition="'$(CI)' == 'true'">true</ContinuousIntegrationBuild>
+
+    <!-- 版本信息 -->
+    <VersionPrefix>0.1.0</VersionPrefix>
+    <AssemblyVersion>0.1.0.0</AssemblyVersion>
+    <FileVersion>0.1.0.0</FileVersion>
+    <Company>EnvStation</Company>
+    <Product>环境站 EnvStation</Product>
+    <Copyright>Copyright (c) 2026 EnvStation contributors</Copyright>
+
+    <!-- 不生成 NuGet 包（本仓库只发布应用） -->
+    <IsPackable>false</IsPackable>
+    <GenerateDocumentationFile>false</GenerateDocumentationFile>
+  </PropertyGroup>
+
+  <!-- AOT / 裁剪基线：所有面向发布的工程默认开启，保证 CI 能提前发现不兼容 -->
+  <PropertyGroup Condition="'$(EnableAotBaseline)' == 'true'">
+    <PublishAot>true</PublishAot>
+    <PublishTrimmed>true</PublishTrimmed>
+    <TrimMode>full</TrimMode>
+    <IsAotCompatible>true</IsAotCompatible>
+  </PropertyGroup>
+
+  <!-- 测试工程统一关闭 AOT 相关严格检查 -->
+  <PropertyGroup Condition="'$(IsTestProject)' == 'true'">
+    <IsPackable>false</IsPackable>
+    <TreatWarningsAsErrors>false</TreatWarningsAsErrors>
+  </PropertyGroup>
+
+</Project>

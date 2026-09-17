@@ -1,0 +1,41 @@
+# 开发过程文档与截图，不上传仓库
+docs/
+
+# 构建产物与测量产物
+bin/
+obj/
+publish/
+artifacts/
+
+# 运行期数据（绝不入库：可能含用户环境变量与凭据）
+snapshots/
+logs/
+staging/
+*.log
+
+# 私钥绝不入库（即使只是测试用的临时密钥）
+*.priv
+*.key
+*private*.pem
+
+# 测试与诊断产物
+TestResults/
+*.trx
+*.coverage
+diagnostics/
+
+# 原生 / AOT 中间产物
+*.pdb
+*.ilk
+*.exp
+*.lib
+*.obj
+
+# IDE
+.vs/
+.idea/
+*.user
+*.suo
+
+# PoC 结果文件（每次运行覆盖，不入库）
+poc-results/

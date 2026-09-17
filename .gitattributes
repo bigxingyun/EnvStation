@@ -1,0 +1,27 @@
+# 行尾统一：仓库里存 LF，检出时按平台自动转换。
+# 不写这个文件的话，Windows 上 core.autocrlf=true 会把 CRLF 提交进仓库，
+# Linux/macOS 上克隆下来就全是 CRLF。
+* text=auto
+
+# 二进制：不要做任何行尾或编码转换
+*.png binary
+*.ico binary
+*.jpg binary
+*.zip binary
+*.gz binary
+*.dll binary
+*.exe binary
+*.pdb binary
+
+# 这些文件对行尾敏感，强制 LF
+*.sln text eol=lf
+*.csproj text eol=lf
+*.props text eol=lf
+*.targets text eol=lf
+LICENSE text eol=lf
+
+# PowerShell 脚本保持 Windows 习惯
+*.ps1 text eol=crlf
+*.psm1 text eol=crlf
+*.cmd text eol=crlf
+*.bat text eol=crlf

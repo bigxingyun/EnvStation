@@ -1,0 +1,104 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows10.0.19041.0</TargetFramework>
+    <TargetPlatformMinVersion>10.0.17763.0</TargetPlatformMinVersion>
+    <RootNamespace>EnvStation.App</RootNamespace>
+    <AssemblyName>EnvStation</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Platforms>x64;ARM64</Platforms>
+    <RuntimeIdentifiers>win-x64;win-arm64</RuntimeIdentifiers>
+    <UseWinUI>true</UseWinUI>
+
+    <!--
+      非打包（unpackaged）运行：直接产出可双击运行的 exe。
+      为什么第一期选非打包：
+        · 便于本机实测冷启动与内存（M0-P01 的三个阈值），不必先装 MSIX；
+        · 用户下载即用，不需要先信任一个安装包——这与"导出别人分享的包"这件事的信任模型一致。
+      MSIX/MSI 打包在 M15 交付阶段再补（需求 PK-1~PK-12）。
+    -->
+    <WindowsPackageType>None</WindowsPackageType>
+
+    <!--
+      EnableMsixTooling=true 并不是"要打成 MSIX 包"，而是"启用官方单工程 MSIX 工具链"。
+      非打包应用同样需要它——原因见下面 Microsoft.Windows.SDK.BuildTools.MSIX 的说明。
+    -->
+    <EnableMsixTooling>true</EnableMsixTooling>
+
+    <!--
+      Windows App SDK 自包含：把运行时打进输出目录。
+      理由：框架依赖模式要求用户机器上已装 Windows App SDK 运行时，
+      而"环境配置工具本身还要先装一个运行时"是很差的首次体验（需求 BLD 的部署决策）。
+      代价是体积；具体数值由 M0-P01 实测记录。
+    -->
+    <WindowsAppSDKSelfContained>true</WindowsAppSDKSelfContained>
+    <SelfContained>true</SelfContained>
+
+    <!-- AOT 暂不开启：WinUI 3 的 XAML 编译在 Native AOT 下仍需额外验证（见 M0-P00 结论） -->
+    <EnableAotBaseline>false</EnableAotBaseline>
+
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+
+  </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250228001" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+
+    <!--
+      PRI（资源索引）工具链。这一条不是可选项，理由是实测出来的：
+        · 不引用它时，WASDK 自带的 MrtCore.PriGen.targets 会用
+          $(MSBuildExtensionsPath)\Microsoft\VisualStudio\v17.0\AppxPackage\Microsoft.Build.Packaging.Pri.Tasks.dll，
+          而那个程序集只随 Visual Studio 的「通用 Windows 平台开发」工作负载提供。
+          本机没有 → dotnet build 直接 MSB4062 失败。
+        · 把 PRI 生成整个关掉能编过，但运行期会崩：
+          Cannot locate resource from 'ms-appx:///Microsoft.UI.Xaml/Themes/themeresources.xaml'
+          —— 框架自身资源也要通过 PRI 索引才找得到，散文件回退并不覆盖这条路径。
+      该包自带 PRI 任务的实现（tools/net6.0/Microsoft.Windows.SDK.BuildTools.MSIX.dll），
+      与 Visual Studio 无关；同时在 Internal/Common.props 里把 EnableCoreMrtTooling 关掉，
+      避免两套工具链各跑一遍 PRI 生成。
+    -->
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.3.20250314.1" GeneratePathProperty="true" />
+  </ItemGroup>
+
+  <!--
+    把 MSIX 任务的程序集位置指到 Microsoft.Windows.SDK.BuildTools.MSIX 包自己的 tools 目录。
+    为什么必须显式指：WASDK 自带的 Microsoft.Build.Msix.Packaging.targets 会先把
+    MsixTaskAssemblyLocation 设成「WASDK 包\tools\net6.0\」，而单独的 MSIX 工具链包随后
+    只是在这个目录后面拼上自己的 dll 名（Microsoft.Windows.SDK.BuildTools.MSIX.dll），
+    那个文件只在 MSIX 工具链包里 —— 于是报 MSB4062「找不到程序集」。
+    这里在 csproj 主体（早于所有 NuGet .targets）里抢先赋值，两边的 =='' 条件就都不成立，
+    最终 MsixTaskAssembly 指向真实存在的文件。
+  -->
+  <PropertyGroup Condition="'$(PkgMicrosoft_Windows_SDK_BuildTools_MSIX)' != ''">
+    <MsixTaskAssemblyLocation Condition="'$(MSBuildRuntimeType)' == 'Core'">$(PkgMicrosoft_Windows_SDK_BuildTools_MSIX)\tools\net6.0\</MsixTaskAssemblyLocation>
+    <MsixTaskAssemblyLocation Condition="'$(MSBuildRuntimeType)' != 'Core'">$(PkgMicrosoft_Windows_SDK_BuildTools_MSIX)\tools\net472\</MsixTaskAssemblyLocation>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EnvStation.Abstractions\EnvStation.Abstractions.csproj" />
+    <ProjectReference Include="..\EnvStation.Core\EnvStation.Core.csproj" />
+  </ItemGroup>
+
+  <!--
+    设计令牌的载体是 Generated/DesignTokens.g.cs（由 design/generate-tokens.ps1 生成），
+    不再把 design/xaml/*.xaml 复制到输出目录、也不在运行期加载它们。
+    原因：界面全部由 C# 构建，散装 XAML 在运行期加载不可靠（XamlReader 不支持编译期类型、
+    ResourceDictionary.Source 指向散文件直接 COMException、普通索引器查不到 ThemeDictionaries），
+    三条都是本机实测结果。XAML 字典仍然保留为「给人看的规范载体」，由
+    tools/validate-xaml.ps1 校验，并由 verify-m0.ps1 与生成的 C# 表做一致性比对。
+  -->
+  <ItemGroup>
+    <None Include="..\..\design\xaml\*.xaml" Link="Themes\%(Filename)%(Extension)" />
+    <Page Remove="..\..\design\xaml\*.xaml" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Page Update="App.xaml">
+      <Generator>MSBuild:Compile</Generator>
+    </Page>
+  </ItemGroup>
+
+</Project>

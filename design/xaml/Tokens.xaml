@@ -1,0 +1,34 @@
+﻿<!--
+    环境站 EnvStation — 设计令牌入口（Design Token Entry Point）
+
+    用法（在 App.xaml 中，字典已作为 Content 复制/链接到 Themes/ 目录）：
+        <Application.Resources>
+            <ResourceDictionary>
+                <ResourceDictionary.MergedDictionaries>
+                    <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+                    <ResourceDictionary Source="Tokens.xaml" />
+                </ResourceDictionary.MergedDictionaries>
+            </ResourceDictionary>
+        </Application.Resources>
+
+    约定（对应《UI设计规范.md》第 8.2 节 IM-1~IM-3）：
+      · 控件**只允许**引用语义令牌（如 {ThemeResource SurfaceContainerLow}），
+        禁止直接写十六进制色值、禁止引用 Palette 原色（Primary80 这类）。
+      · 主题相关资源一律用 {ThemeResource}，不要用 {StaticResource}，否则主题切换不生效。
+      · 资源键为编译期常量，禁止运行期资源反射查找（Native AOT 约束）。
+
+    令牌唯一来源：design/tokens.json（由 design/generate-tokens.ps1 生成）。
+    本文件与同目录其余字典必须与该源头保持一致；校验见 tools/validate-xaml.ps1。
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.MergedDictionaries>
+        <ResourceDictionary Source="Colors.xaml" />
+        <ResourceDictionary Source="Typography.xaml" />
+        <ResourceDictionary Source="Shapes.xaml" />
+        <ResourceDictionary Source="Motion.xaml" />
+    </ResourceDictionary.MergedDictionaries>
+
+</ResourceDictionary>

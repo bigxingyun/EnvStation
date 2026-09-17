@@ -1,0 +1,108 @@
+# 环境站 EnvStation — 代码分析规则调整
+#
+# 原则：默认保持"警告即错误"的严格基线（Directory.Build.props），
+# 仅对**已论证的、与设计意图冲突的**规则做定向豁免，并在下方写明理由。
+# 禁止使用全局 severity = none 来"关掉一片"。
+
+root = true
+
+[*]
+charset = utf-8
+end_of_line = crlf
+insert_final_newline = true
+trim_trailing_whitespace = true
+indent_style = space
+indent_size = 4
+
+[*.{json,yml,yaml,props,targets,csproj}]
+indent_size = 2
+
+[*.md]
+trim_trailing_whitespace = false
+
+[*.{cs,csx}]
+# 使用 .NET 官方命名与方法风格
+dotnet_sort_system_directives_first = true
+csharp_style_namespace_declarations = file_scoped:warning
+
+# ── 定向豁免（每条都写明理由）──────────────────────────────────────────
+
+# CA1000 不要在泛型类型中声明静态成员
+#   理由：Result<T>.Ok / Result<T>.Fail 是判别联合（discriminated union）的标准构造模式。
+#   C# 没有 sum type，工厂方法必须挂在泛型类型上。全行业惯例，无替代方案。
+dotnet_diagnostic.CA1000.severity = none
+
+# CA1720 标识符包含类型名称
+#   理由：EnvValueKind.String / ExpandString 直接对应 Windows 的 REG_SZ / REG_EXPAND_SZ，
+#   这两个名字是**领域术语**而非"类型名借用"。改名反而降低可读性。
+dotnet_diagnostic.CA1720.severity = none
+
+# CA1805 成员已显式初始化为其默认值
+#   理由：显式初始化用于表达意图（Unit.Value = default 是刻意声明"这是一个空值类型"）。
+dotnet_diagnostic.CA1805.severity = none
+
+# CA1034 嵌套类型不应对外可见 —— 领域模型中少量嵌套枚举是可接受的
+dotnet_diagnostic.CA1034.severity = suggestion
+
+# CA1716 标识符不应与保留关键字冲突
+#   理由：'Result'、'Error' 等命名是领域语言的核心词汇。
+dotnet_diagnostic.CA1716.severity = suggestion
+
+# CA1303 不应将字面字符串作为本地化参数传递
+#   理由：v1 的本地化由 Strings.resx 在 UI 层承担，Core 层错误文案为中文常量，
+#   待 NFR-I1 落地后统一迁移。此规则在迁移前会产生大量噪音。
+dotnet_diagnostic.CA1303.severity = suggestion
+
+# CA2007 对 await 调用 ConfigureAwait
+#   理由：本项目**没有** UI 同步上下文陷阱顾虑（Core 层不接触 UI），
+#   且 Core 内已按需显式使用 ConfigureAwait(false)。
+dotnet_diagnostic.CA2007.severity = suggestion
+
+# CA1062 验证公共方法的参数
+#   理由：Core 层通过 Result<T> 返回值表达失败，而非抛 ArgumentNullException；
+#   参数校验走 ValidateNameAndValue 等显式路径。
+dotnet_diagnostic.CA1062.severity = suggestion
+
+# IDE0055 格式设置 —— 由 EnforceCodeStyleInBuild 覆盖，避免与手工排版冲突时刷屏
+dotnet_diagnostic.IDE0055.severity = suggestion
+
+# CA1859 尽可能使用具体类型以提高性能
+#   理由：内部方法刻意以 IReadOnlyList<T> / IEnumerable<T> 作为返回契约，表达"调用方不得修改"。
+#   为性能改成 List<T> 会削弱契约表达力；且这些路径不在热路径上（PATH 通常几十项），收益可忽略。
+dotnet_diagnostic.CA1859.severity = suggestion
+
+# CA1838 避免在 P/Invoke 中使用 StringBuilder
+#   理由：已改为 LibraryImport + char[] 缓冲（更适合 Native AOT），此规则不再触发；
+#   保留为 suggestion 以防未来新增 P/Invoke 时被误伤。
+dotnet_diagnostic.CA1838.severity = suggestion
+
+# CA1051 不要声明可见的实例字段 / CA1819 属性不应返回数组
+#   理由：领域模型为不可变 record，这两条规则在该场景下产生大量噪音而无实际风险。
+dotnet_diagnostic.CA1051.severity = suggestion
+dotnet_diagnostic.CA1819.severity = suggestion
+
+# CA1305/CA1307 应指定 IFormatProvider / StringComparison
+#   理由：Core 层文案为中文常量、路径比较已显式传 StringComparison.Ordinal；
+#   剩余触发点属于噪音。待 NFR-I1 本地化落地时统一处理。
+dotnet_diagnostic.CA1305.severity = suggestion
+dotnet_diagnostic.CA1307.severity = suggestion
+
+# ── 测试工程专项 ────────────────────────────────────────────────────────
+[tests/**/*.cs]
+
+# CA1416 平台兼容性
+#   理由：本仓库的测试工程全部是 Windows 专属（它们验证注册表读写、影子目录切换等
+#   Windows 独有能力），不会在非 Windows 上运行。生产代码（RegistryEnvStore）已用
+#   [SupportedOSPlatform("windows")] 正确标注；测试代码直接调用注册表 API 属于预期行为，
+#   逐个标注只会制造噪音。
+dotnet_diagnostic.CA1416.severity = none
+
+# CA1707 标识符不应包含下划线 —— 测试用例 ID（P02-1、P06-8 等）沿用任务书编号，便于对照
+dotnet_diagnostic.CA1707.severity = none
+
+# CA1861 常量数组应提取为静态字段 —— 测试中内联数组更直观
+dotnet_diagnostic.CA1861.severity = suggestion
+
+# CA2000 释放对象 —— 测试中的一次性对象由进程退出回收
+dotnet_diagnostic.CA2000.severity = suggestion
+

@@ -1,0 +1,26 @@
+﻿default_on_error = "rollback"
+
+[[steps]]
+id = "detect-python"
+uses = "envstation.detect.runtime@1.0.0"
+register = "py"
+
+[steps.with]
+kind = "python"
+requirement = ">=3.10"
+
+[[steps]]
+id = "inspect-path"
+uses = "envstation.path.validate@1.0.0"
+register = "pathinfo"
+
+[steps.with]
+scope = "user"
+
+[[steps]]
+id = "report"
+uses = "envstation.ui.notify@1.0.0"
+
+[steps.with]
+level = "info"
+message = "Python 检测结果：${pkg.py.found}（版本 ${pkg.py.version}）；PATH 共 ${pkg.pathinfo.entry_count} 项，其中 ${pkg.pathinfo.problem_count} 项需关注。"

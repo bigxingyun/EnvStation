@@ -1,0 +1,9 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- 抽象层不依赖任何其他工程（DL-1），可被 Core / Application / Helper / PackageHost 共享 -->
+    <EnableAotBaseline>true</EnableAotBaseline>
+    <RootNamespace>EnvStation.Abstractions</RootNamespace>
+  </PropertyGroup>
+
+</Project>

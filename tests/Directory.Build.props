@@ -1,0 +1,42 @@
+<Project>
+
+  <!--
+    重要（MSBuild 行为）：一旦某个目录出现 Directory.Build.props，MSBuild 就会在**该目录停止**
+    向上查找，因此必须显式 Import 仓库根的同名文件，否则根配置（TargetFramework 等）会丢失，
+    表现为 error NETSDK1013「未识别 TargetFramework 值」。
+  -->
+  <Import Project="$([MSBuild]::GetPathOfFileAbove('Directory.Build.props', '$(MSBuildThisFileDirectory)../'))" />
+
+  <!--
+    目标框架说明：
+    · 仓库根统一为 net8.0（与 src 各工程一致，保持可引用性）。
+    · 这里保持 net8.0 不变 —— 已尝试改为 net8.0-windows10.0.17763.0，但那样会与
+      src（net8.0）产生 TFM 不兼容而无法引用。
+    · 因此对"直接调用注册表 API"的测试工程，改为在 .editorconfig 中定向豁免 CA1416，
+      理由：测试工程全部是 Windows 专属，且已在断言器上做了平台标注。
+      生产代码（RegistryEnvStore）则使用 [SupportedOSPlatform("windows")] 正确标注。
+  -->
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <EnableAotBaseline>false</EnableAotBaseline>
+    <IsTestProject>true</IsTestProject>
+  </PropertyGroup>
+
+  <!--
+    测试工程统一开放被测程序集的内部可见性，避免每新增测试工程都要回 src 补 InternalsVisibleTo。
+    M0-P05 注入故障点（ShadowInstaller.FaultInjector）正依赖此机制。
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="$(MSBuildProjectName)" />
+  </ItemGroup>
+
+  <!--
+    共享全局 using（别名 + 类型 using），用于解决命名空间遮蔽导致的 CS0246。
+    详见 tests/TestGlobalUsings.cs 顶部注释。
+    排除 EnvStation.TestKit 自身：它是零依赖基础库，不引用 Core/Abstractions。
+  -->
+  <ItemGroup Condition="'$(MSBuildProjectName)' != 'EnvStation.TestKit'">
+    <Compile Include="$(MSBuildThisFileDirectory)TestGlobalUsings.cs" Link="TestGlobalUsings.cs" />
+  </ItemGroup>
+
+</Project>

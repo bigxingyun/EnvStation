@@ -1,0 +1,100 @@
+﻿<!--
+    环境站 EnvStation — 形状、间距、层级令牌
+
+    来源：design/tokens.json → shape / spacing / density
+    密度档：**M3 桌面密度档**（对应 VisualDensity.compact），见 UI设计规范 2.5.0 节。
+
+    单位说明：
+      · RadiusXXX 为 CornerRadius（WinUI 用 CornerRadius 类型）
+      · SpaceN 为 Thickness 便于直接用于 Margin/Padding；同时给出 SpaceNValue 供需要 double 的场景
+      · HeightXxx 为 double，用于控件高度与行高
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:sys="using:System">
+
+    <!-- ═══════════════════ M3 Shape Scale（桌面档取紧凑半径） ═══════════════════
+         桌面档刻意把 XL 从 28 收到 20：28px 在桌面尺度上偏"圆润"，与产品定位不符。 -->
+
+    <CornerRadius x:Key="Radius.XS">4</CornerRadius>
+    <CornerRadius x:Key="Radius.S">8</CornerRadius>
+    <CornerRadius x:Key="Radius.M">10</CornerRadius>
+    <CornerRadius x:Key="Radius.L">14</CornerRadius>
+    <CornerRadius x:Key="Radius.XL">20</CornerRadius>
+    <CornerRadius x:Key="Radius.Full">999</CornerRadius>
+
+    <!-- 单角变体（列表项、抽屉等只需要一侧圆角） -->
+    <CornerRadius x:Key="Radius.DrawerTop">20,20,0,0</CornerRadius>
+    <CornerRadius x:Key="Radius.DrawerRight">0,14,14,0</CornerRadius>
+
+    <!-- ═══════════════════ 间距刻度（4px 基准） ═══════════════════ -->
+
+    <Thickness x:Key="Space1">4</Thickness>
+    <Thickness x:Key="Space2">8</Thickness>
+    <Thickness x:Key="Space3">12</Thickness>
+    <Thickness x:Key="Space4">16</Thickness>
+    <Thickness x:Key="Space5">20</Thickness>
+    <Thickness x:Key="Space6">24</Thickness>
+    <Thickness x:Key="Space8">32</Thickness>
+
+    <sys:Double x:Key="Space1Value">4</sys:Double>
+    <sys:Double x:Key="Space2Value">8</sys:Double>
+    <sys:Double x:Key="Space3Value">12</sys:Double>
+    <sys:Double x:Key="Space4Value">16</sys:Double>
+    <sys:Double x:Key="Space5Value">20</sys:Double>
+    <sys:Double x:Key="Space6Value">24</sys:Double>
+    <sys:Double x:Key="Space8Value">32</sys:Double>
+
+    <!-- ═══════════════════ 边框宽度 ═══════════════════ -->
+
+    <Thickness x:Key="Stroke.Thin">1</Thickness>
+    <Thickness x:Key="Stroke.Focus">2</Thickness>
+
+    <!-- ═══════════════════ 密度：容器高度（桌面档） ═══════════════════
+         切换档位只改这些值 + 行高，**不改字号**（UI设计规范 DN-1）。
+         若要支持"标准档 / 舒适档"，替换本区段的数值即可，其余不用动。 -->
+
+    <sys:Double x:Key="Height.ListItem">48</sys:Double>
+    <sys:Double x:Key="Height.TableRow">48</sys:Double>
+    <sys:Double x:Key="Height.TableHeader">44</sys:Double>
+    <sys:Double x:Key="Height.Button">36</sys:Double>
+    <sys:Double x:Key="Height.ButtonSmall">32</sys:Double>
+    <sys:Double x:Key="Height.IconButton">32</sys:Double>
+    <sys:Double x:Key="Height.IconButtonLarge">40</sys:Double>
+    <sys:Double x:Key="Height.Chip">28</sys:Double>
+    <sys:Double x:Key="Height.ChipSmall">24</sys:Double>
+    <sys:Double x:Key="Height.TopAppBar">56</sys:Double>
+    <sys:Double x:Key="Height.NavItem">48</sys:Double>
+    <sys:Double x:Key="Height.StatusBar">24</sys:Double>
+    <sys:Double x:Key="Height.TextField">48</sys:Double>
+    <sys:Double x:Key="Height.TextFieldSmall">38</sys:Double>
+    <sys:Double x:Key="Height.DialogAction">48</sys:Double>
+    <sys:Double x:Key="Height.Fab">52</sys:Double>
+
+    <!-- ═══════════════════ 密度：内边距与固定尺寸 ═══════════════════ -->
+
+    <Thickness x:Key="Padding.Card">14</Thickness>
+    <Thickness x:Key="Padding.ListItem">14,6,14,6</Thickness>
+    <Thickness x:Key="Padding.Dialog">20</Thickness>
+    <Thickness x:Key="Padding.PageHorizontal">20</Thickness>
+    <Thickness x:Key="Padding.PageBottom">92</Thickness>
+
+    <sys:Double x:Key="Width.NavDrawer">360</sys:Double>
+    <sys:Double x:Key="Width.CommandPalette">680</sys:Double>
+    <sys:Double x:Key="Width.Dialog">560</sys:Double>
+    <sys:Double x:Key="Width.PermissionWall">760</sys:Double>
+    <sys:Double x:Key="Width.OutputSheetHeight">290</sys:Double>
+    <sys:Double x:Key="Size.StatusDot">8</sys:Double>
+    <sys:Double x:Key="Size.SwitchTrackWidth">44</sys:Double>
+    <sys:Double x:Key="Size.SwitchTrackHeight">28</sys:Double>
+    <sys:Double x:Key="Size.SwitchThumb">20</sys:Double>
+    <sys:Double x:Key="Size.ProgressBarHeight">4</sys:Double>
+
+    <!-- ═══════════════════ M3 Elevation（阴影） ═══════════════════
+         深色下以 surface 色调表达高度，阴影极弱；浅色下用轻阴影。
+         注意：WinUI 的 ThemeShadow 需要控件参与视觉树，简单场景用 Border 阴影更稳。 -->
+
+    <Thickness x:Key="Elevation.None">0</Thickness>
+
+</ResourceDictionary>

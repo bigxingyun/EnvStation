@@ -1,0 +1,407 @@
+﻿<!--
+    环境站 EnvStation — 颜色令牌（M3 Tonal Palette → Color Roles）
+
+    ★ 本文件是**颜色语义的唯一出口**。UI 代码只允许使用 <see cref="ColorRoles"/> 段落中的 Brush 键；
+      Palette 段落仅作记录与排障用途，控件不得引用（见 UI设计规范 8.2 节 IM-1）。
+
+    结构说明：
+      · ThemeDictionaries 提供 Dark / Light / HighContrast 三套值，键名与顺序完全一致。
+      · 色值来源：design/tokens.json → colorRoles.dark / colorRoles.light。
+      · 对比度已由 design/generate-tokens.ps1 自检通过（WCAG AA，11 组配对全部 ≥ 4.5:1）。
+
+    命名约定（与 tokens.json 的 role 名一一对应）：
+      · 颜色键：<Role>Color      （如 PrimaryColor）
+      · 画刷键：<Role>           （如 Primary）
+      这样 XAML 里写 Background="{ThemeResource SurfaceContainerLow}" 即可。
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+
+    <ResourceDictionary.ThemeDictionaries>
+
+        <!-- ============================ 深色（默认） ============================ -->
+        <ResourceDictionary x:Key="Dark">
+
+            <!-- ── 主色 ── -->
+            <Color x:Key="PrimaryColor">#4FDBD2</Color>
+            <Color x:Key="OnPrimaryColor">#003731</Color>
+            <Color x:Key="PrimaryContainerColor">#005048</Color>
+            <Color x:Key="OnPrimaryContainerColor">#6FF7EA</Color>
+
+            <!-- ── 次色 ── -->
+            <Color x:Key="SecondaryColor">#B6CBC6</Color>
+            <Color x:Key="OnSecondaryColor">#213431</Color>
+            <Color x:Key="SecondaryContainerColor">#374B47</Color>
+            <Color x:Key="OnSecondaryContainerColor">#D2E7E2</Color>
+
+            <!-- ── 三级色 ── -->
+            <Color x:Key="TertiaryColor">#B6CBC6</Color>
+            <Color x:Key="OnTertiaryColor">#213431</Color>
+
+            <!-- ── 错误 ── -->
+            <Color x:Key="ErrorColor">#FFB4AB</Color>
+            <Color x:Key="OnErrorColor">#690005</Color>
+            <Color x:Key="ErrorContainerColor">#93000A</Color>
+            <Color x:Key="OnErrorContainerColor">#FFDAD6</Color>
+
+            <!-- ── 表面（M3 Surface Container 五级：用色调表达高度，不用边框） ── -->
+            <Color x:Key="SurfaceColor">#101413</Color>
+            <Color x:Key="OnSurfaceColor">#E1E3E0</Color>
+            <Color x:Key="SurfaceVariantColor">#444846</Color>
+            <Color x:Key="OnSurfaceVariantColor">#C5C8C5</Color>
+            <Color x:Key="SurfaceDimColor">#101413</Color>
+            <Color x:Key="SurfaceBrightColor">#373B39</Color>
+            <Color x:Key="SurfaceContainerLowestColor">#0C0F0E</Color>
+            <Color x:Key="SurfaceContainerLowColor">#191C1B</Color>
+            <Color x:Key="SurfaceContainerColor">#1D201F</Color>
+            <Color x:Key="SurfaceContainerHighColor">#272B29</Color>
+            <Color x:Key="SurfaceContainerHighestColor">#333635</Color>
+
+            <!-- ── 描边 ── -->
+            <Color x:Key="OutlineColor">#8F9290</Color>
+            <Color x:Key="OutlineVariantColor">#444846</Color>
+
+            <!-- ── 反色（终端区、代码块） ── -->
+            <Color x:Key="InverseSurfaceColor">#E1E3E0</Color>
+            <Color x:Key="InverseOnSurfaceColor">#2E3130</Color>
+            <Color x:Key="ScrimColor">#000000</Color>
+
+            <!-- ── 成功（M3 无 success role，按 tonal 规则派生自主色） ── -->
+            <Color x:Key="SuccessColor">#4FDBD2</Color>
+            <Color x:Key="OnSuccessColor">#003731</Color>
+            <Color x:Key="SuccessContainerColor">#005048</Color>
+            <Color x:Key="OnSuccessContainerColor">#6FF7EA</Color>
+
+            <!-- ── 警告（M3 无 warn role；浅色下必须加深，见规范 2.2 节的坑） ── -->
+            <Color x:Key="WarnColor">#F0C24B</Color>
+            <Color x:Key="OnWarnColor">#3A2D00</Color>
+            <Color x:Key="WarnContainerColor">#4A3B10</Color>
+            <Color x:Key="OnWarnContainerColor">#FFE79A</Color>
+
+            <!-- ── 技术值专用（等宽文本着色，取自原型验证过的值） ── -->
+            <Color x:Key="TechSurfaceColor">#080A09</Color>
+            <Color x:Key="TechTextColor">#CBD5D1</Color>
+            <Color x:Key="TechPathColor">#6FF7EA</Color>
+            <Color x:Key="TechVersionColor">#9CCDFF</Color>
+            <Color x:Key="TechCommandColor">#FFC48A</Color>
+            <Color x:Key="TechHashColor">#C6B4FF</Color>
+
+            <!-- ══════════════════ 画刷（控件实际引用的键） ══════════════════ -->
+
+            <SolidColorBrush x:Key="Primary" Color="{StaticResource PrimaryColor}" />
+            <SolidColorBrush x:Key="OnPrimary" Color="{StaticResource OnPrimaryColor}" />
+            <SolidColorBrush x:Key="PrimaryContainer" Color="{StaticResource PrimaryContainerColor}" />
+            <SolidColorBrush x:Key="OnPrimaryContainer" Color="{StaticResource OnPrimaryContainerColor}" />
+
+            <SolidColorBrush x:Key="Secondary" Color="{StaticResource SecondaryColor}" />
+            <SolidColorBrush x:Key="OnSecondary" Color="{StaticResource OnSecondaryColor}" />
+            <SolidColorBrush x:Key="SecondaryContainer" Color="{StaticResource SecondaryContainerColor}" />
+            <SolidColorBrush x:Key="OnSecondaryContainer" Color="{StaticResource OnSecondaryContainerColor}" />
+
+            <SolidColorBrush x:Key="Tertiary" Color="{StaticResource TertiaryColor}" />
+            <SolidColorBrush x:Key="OnTertiary" Color="{StaticResource OnTertiaryColor}" />
+
+            <SolidColorBrush x:Key="Error" Color="{StaticResource ErrorColor}" />
+            <SolidColorBrush x:Key="OnError" Color="{StaticResource OnErrorColor}" />
+            <SolidColorBrush x:Key="ErrorContainer" Color="{StaticResource ErrorContainerColor}" />
+            <SolidColorBrush x:Key="OnErrorContainer" Color="{StaticResource OnErrorContainerColor}" />
+
+            <SolidColorBrush x:Key="Surface" Color="{StaticResource SurfaceColor}" />
+            <SolidColorBrush x:Key="OnSurface" Color="{StaticResource OnSurfaceColor}" />
+            <SolidColorBrush x:Key="SurfaceVariant" Color="{StaticResource SurfaceVariantColor}" />
+            <SolidColorBrush x:Key="OnSurfaceVariant" Color="{StaticResource OnSurfaceVariantColor}" />
+            <SolidColorBrush x:Key="SurfaceDim" Color="{StaticResource SurfaceDimColor}" />
+            <SolidColorBrush x:Key="SurfaceBright" Color="{StaticResource SurfaceBrightColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerLowest" Color="{StaticResource SurfaceContainerLowestColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerLow" Color="{StaticResource SurfaceContainerLowColor}" />
+            <SolidColorBrush x:Key="SurfaceContainer" Color="{StaticResource SurfaceContainerColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerHigh" Color="{StaticResource SurfaceContainerHighColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerHighest" Color="{StaticResource SurfaceContainerHighestColor}" />
+
+            <SolidColorBrush x:Key="Outline" Color="{StaticResource OutlineColor}" />
+            <SolidColorBrush x:Key="OutlineVariant" Color="{StaticResource OutlineVariantColor}" />
+
+            <SolidColorBrush x:Key="InverseSurface" Color="{StaticResource InverseSurfaceColor}" />
+            <SolidColorBrush x:Key="InverseOnSurface" Color="{StaticResource InverseOnSurfaceColor}" />
+            <SolidColorBrush x:Key="Scrim" Color="{StaticResource ScrimColor}" />
+
+            <SolidColorBrush x:Key="Success" Color="{StaticResource SuccessColor}" />
+            <SolidColorBrush x:Key="OnSuccess" Color="{StaticResource OnSuccessColor}" />
+            <SolidColorBrush x:Key="SuccessContainer" Color="{StaticResource SuccessContainerColor}" />
+            <SolidColorBrush x:Key="OnSuccessContainer" Color="{StaticResource OnSuccessContainerColor}" />
+
+            <SolidColorBrush x:Key="Warn" Color="{StaticResource WarnColor}" />
+            <SolidColorBrush x:Key="OnWarn" Color="{StaticResource OnWarnColor}" />
+            <SolidColorBrush x:Key="WarnContainer" Color="{StaticResource WarnContainerColor}" />
+            <SolidColorBrush x:Key="OnWarnContainer" Color="{StaticResource OnWarnContainerColor}" />
+
+            <SolidColorBrush x:Key="TechSurface" Color="{StaticResource TechSurfaceColor}" />
+            <SolidColorBrush x:Key="TechText" Color="{StaticResource TechTextColor}" />
+            <SolidColorBrush x:Key="TechPath" Color="{StaticResource TechPathColor}" />
+            <SolidColorBrush x:Key="TechVersion" Color="{StaticResource TechVersionColor}" />
+            <SolidColorBrush x:Key="TechCommand" Color="{StaticResource TechCommandColor}" />
+            <SolidColorBrush x:Key="TechHash" Color="{StaticResource TechHashColor}" />
+
+            <!-- ── M3 State Layer 与半透明变体 ──
+                 用于 State Layer（hover 8% / focus 与 pressed 10%）与 Subtle 底色。
+                 刻意用 SolidColorBrush 而非 LinearGradientBrush，避免 AOT 下的额外类型依赖。 -->
+            <SolidColorBrush x:Key="AccentSubtle" Color="#4FDBD2" Opacity="0.14" />
+            <SolidColorBrush x:Key="OnSurfaceHover" Color="#E1E3E0" Opacity="0.08" />
+            <SolidColorBrush x:Key="OnSurfacePressed" Color="#E1E3E0" Opacity="0.10" />
+
+        </ResourceDictionary>
+
+        <!-- ============================ 浅色 ============================ -->
+        <ResourceDictionary x:Key="Light">
+
+            <Color x:Key="PrimaryColor">#006A60</Color>
+            <Color x:Key="OnPrimaryColor">#FFFFFF</Color>
+            <Color x:Key="PrimaryContainerColor">#6FF7EA</Color>
+            <Color x:Key="OnPrimaryContainerColor">#00201C</Color>
+
+            <Color x:Key="SecondaryColor">#4F635E</Color>
+            <Color x:Key="OnSecondaryColor">#FFFFFF</Color>
+            <Color x:Key="SecondaryContainerColor">#D2E7E2</Color>
+            <Color x:Key="OnSecondaryContainerColor">#0B1F1C</Color>
+
+            <Color x:Key="TertiaryColor">#4F635E</Color>
+            <Color x:Key="OnTertiaryColor">#FFFFFF</Color>
+
+            <Color x:Key="ErrorColor">#BA1A1A</Color>
+            <Color x:Key="OnErrorColor">#FFDAD6</Color>
+            <Color x:Key="ErrorContainerColor">#FFDAD6</Color>
+            <Color x:Key="OnErrorContainerColor">#410002</Color>
+
+            <Color x:Key="SurfaceColor">#F8FAF7</Color>
+            <Color x:Key="OnSurfaceColor">#191C1B</Color>
+            <Color x:Key="SurfaceVariantColor">#E1E3E0</Color>
+            <Color x:Key="OnSurfaceVariantColor">#444846</Color>
+            <Color x:Key="SurfaceDimColor">#DBDEDB</Color>
+            <Color x:Key="SurfaceBrightColor">#F8FAF7</Color>
+            <Color x:Key="SurfaceContainerLowestColor">#FFFFFF</Color>
+            <Color x:Key="SurfaceContainerLowColor">#F2F4F1</Color>
+            <Color x:Key="SurfaceContainerColor">#EDEFEC</Color>
+            <Color x:Key="SurfaceContainerHighColor">#E7E9E6</Color>
+            <Color x:Key="SurfaceContainerHighestColor">#E1E3E0</Color>
+
+            <Color x:Key="OutlineColor">#757876</Color>
+            <Color x:Key="OutlineVariantColor">#C5C8C5</Color>
+
+            <Color x:Key="InverseSurfaceColor">#2E3130</Color>
+            <Color x:Key="InverseOnSurfaceColor">#EFF1EE</Color>
+            <Color x:Key="ScrimColor">#000000</Color>
+
+            <Color x:Key="SuccessColor">#006A60</Color>
+            <Color x:Key="OnSuccessColor">#FFFFFF</Color>
+            <Color x:Key="SuccessContainerColor">#6FF7EA</Color>
+            <Color x:Key="OnSuccessContainerColor">#00201C</Color>
+
+            <!-- ★ 浅色警告色必须加深：若沿用深色的 #F0C24B，白底对比度仅约 2.4:1 -->
+            <Color x:Key="WarnColor">#7A5900</Color>
+            <Color x:Key="OnWarnColor">#FFFFFF</Color>
+            <Color x:Key="WarnContainerColor">#FFE08A</Color>
+            <Color x:Key="OnWarnContainerColor">#261A00</Color>
+
+            <Color x:Key="TechSurfaceColor">#EDEFEC</Color>
+            <Color x:Key="TechTextColor">#191C1B</Color>
+            <Color x:Key="TechPathColor">#00635A</Color>
+            <Color x:Key="TechVersionColor">#0B4F9E</Color>
+            <Color x:Key="TechCommandColor">#8A4A00</Color>
+            <Color x:Key="TechHashColor">#5B3FA8</Color>
+
+            <SolidColorBrush x:Key="Primary" Color="{StaticResource PrimaryColor}" />
+            <SolidColorBrush x:Key="OnPrimary" Color="{StaticResource OnPrimaryColor}" />
+            <SolidColorBrush x:Key="PrimaryContainer" Color="{StaticResource PrimaryContainerColor}" />
+            <SolidColorBrush x:Key="OnPrimaryContainer" Color="{StaticResource OnPrimaryContainerColor}" />
+
+            <SolidColorBrush x:Key="Secondary" Color="{StaticResource SecondaryColor}" />
+            <SolidColorBrush x:Key="OnSecondary" Color="{StaticResource OnSecondaryColor}" />
+            <SolidColorBrush x:Key="SecondaryContainer" Color="{StaticResource SecondaryContainerColor}" />
+            <SolidColorBrush x:Key="OnSecondaryContainer" Color="{StaticResource OnSecondaryContainerColor}" />
+
+            <SolidColorBrush x:Key="Tertiary" Color="{StaticResource TertiaryColor}" />
+            <SolidColorBrush x:Key="OnTertiary" Color="{StaticResource OnTertiaryColor}" />
+
+            <SolidColorBrush x:Key="Error" Color="{StaticResource ErrorColor}" />
+            <SolidColorBrush x:Key="OnError" Color="{StaticResource OnErrorColor}" />
+            <SolidColorBrush x:Key="ErrorContainer" Color="{StaticResource ErrorContainerColor}" />
+            <SolidColorBrush x:Key="OnErrorContainer" Color="{StaticResource OnErrorContainerColor}" />
+
+            <SolidColorBrush x:Key="Surface" Color="{StaticResource SurfaceColor}" />
+            <SolidColorBrush x:Key="OnSurface" Color="{StaticResource OnSurfaceColor}" />
+            <SolidColorBrush x:Key="SurfaceVariant" Color="{StaticResource SurfaceVariantColor}" />
+            <SolidColorBrush x:Key="OnSurfaceVariant" Color="{StaticResource OnSurfaceVariantColor}" />
+            <SolidColorBrush x:Key="SurfaceDim" Color="{StaticResource SurfaceDimColor}" />
+            <SolidColorBrush x:Key="SurfaceBright" Color="{StaticResource SurfaceBrightColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerLowest" Color="{StaticResource SurfaceContainerLowestColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerLow" Color="{StaticResource SurfaceContainerLowColor}" />
+            <SolidColorBrush x:Key="SurfaceContainer" Color="{StaticResource SurfaceContainerColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerHigh" Color="{StaticResource SurfaceContainerHighColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerHighest" Color="{StaticResource SurfaceContainerHighestColor}" />
+
+            <SolidColorBrush x:Key="Outline" Color="{StaticResource OutlineColor}" />
+            <SolidColorBrush x:Key="OutlineVariant" Color="{StaticResource OutlineVariantColor}" />
+
+            <SolidColorBrush x:Key="InverseSurface" Color="{StaticResource InverseSurfaceColor}" />
+            <SolidColorBrush x:Key="InverseOnSurface" Color="{StaticResource InverseOnSurfaceColor}" />
+            <SolidColorBrush x:Key="Scrim" Color="{StaticResource ScrimColor}" />
+
+            <SolidColorBrush x:Key="Success" Color="{StaticResource SuccessColor}" />
+            <SolidColorBrush x:Key="OnSuccess" Color="{StaticResource OnSuccessColor}" />
+            <SolidColorBrush x:Key="SuccessContainer" Color="{StaticResource SuccessContainerColor}" />
+            <SolidColorBrush x:Key="OnSuccessContainer" Color="{StaticResource OnSuccessContainerColor}" />
+
+            <SolidColorBrush x:Key="Warn" Color="{StaticResource WarnColor}" />
+            <SolidColorBrush x:Key="OnWarn" Color="{StaticResource OnWarnColor}" />
+            <SolidColorBrush x:Key="WarnContainer" Color="{StaticResource WarnContainerColor}" />
+            <SolidColorBrush x:Key="OnWarnContainer" Color="{StaticResource OnWarnContainerColor}" />
+
+            <SolidColorBrush x:Key="TechSurface" Color="{StaticResource TechSurfaceColor}" />
+            <SolidColorBrush x:Key="TechText" Color="{StaticResource TechTextColor}" />
+            <SolidColorBrush x:Key="TechPath" Color="{StaticResource TechPathColor}" />
+            <SolidColorBrush x:Key="TechVersion" Color="{StaticResource TechVersionColor}" />
+            <SolidColorBrush x:Key="TechCommand" Color="{StaticResource TechCommandColor}" />
+            <SolidColorBrush x:Key="TechHash" Color="{StaticResource TechHashColor}" />
+
+            <SolidColorBrush x:Key="AccentSubtle" Color="#006A60" Opacity="0.10" />
+            <SolidColorBrush x:Key="OnSurfaceHover" Color="#191C1B" Opacity="0.06" />
+            <SolidColorBrush x:Key="OnSurfacePressed" Color="#191C1B" Opacity="0.10" />
+
+        </ResourceDictionary>
+
+        <!-- ============================ 高对比度 ============================
+             官方要求三套分支的键名集合**完全一致**，因此这里同样给出完整的 Color 键
+             （即使画刷直接引用系统色、不再经由这些中间 Color 键，也必须存在，
+              否则主题切换时的键解析会失败）。
+
+             取值原则：不追求品牌色，而是保证极高反差 + 尊重用户在"轻松使用"中的设置。 -->
+        <ResourceDictionary x:Key="HighContrast">
+
+            <!-- ── 语义色（全部映射到系统色） ── -->
+            <Color x:Key="PrimaryColor">{ThemeResource SystemColorHighlightColor}</Color>
+            <Color x:Key="OnPrimaryColor">{ThemeResource SystemColorHighlightTextColor}</Color>
+            <Color x:Key="PrimaryContainerColor">{ThemeResource SystemColorButtonFaceColor}</Color>
+            <Color x:Key="OnPrimaryContainerColor">{ThemeResource SystemColorButtonTextColor}</Color>
+
+            <Color x:Key="SecondaryColor">{ThemeResource SystemColorButtonFaceColor}</Color>
+            <Color x:Key="OnSecondaryColor">{ThemeResource SystemColorButtonTextColor}</Color>
+            <Color x:Key="SecondaryContainerColor">{ThemeResource SystemColorButtonFaceColor}</Color>
+            <Color x:Key="OnSecondaryContainerColor">{ThemeResource SystemColorButtonTextColor}</Color>
+
+            <Color x:Key="TertiaryColor">{ThemeResource SystemColorButtonFaceColor}</Color>
+            <Color x:Key="OnTertiaryColor">{ThemeResource SystemColorButtonTextColor}</Color>
+
+            <!-- 错误在高对比度下不使用红色（用户可能已改为其他颜色），而用窗口文字色表达"强调" -->
+            <Color x:Key="ErrorColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="OnErrorColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="ErrorContainerColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="OnErrorContainerColor">{ThemeResource SystemColorWindowTextColor}</Color>
+
+            <Color x:Key="SurfaceColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="OnSurfaceColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="SurfaceVariantColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="OnSurfaceVariantColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="SurfaceDimColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="SurfaceBrightColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="SurfaceContainerLowestColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="SurfaceContainerLowColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="SurfaceContainerColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="SurfaceContainerHighColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="SurfaceContainerHighestColor">{ThemeResource SystemColorWindowColor}</Color>
+
+            <Color x:Key="OutlineColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="OutlineVariantColor">{ThemeResource SystemColorWindowTextColor}</Color>
+
+            <Color x:Key="InverseSurfaceColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="InverseOnSurfaceColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="ScrimColor">{ThemeResource SystemColorWindowColor}</Color>
+
+            <Color x:Key="SuccessColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="OnSuccessColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="SuccessContainerColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="OnSuccessContainerColor">{ThemeResource SystemColorWindowTextColor}</Color>
+
+            <Color x:Key="WarnColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="OnWarnColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="WarnContainerColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="OnWarnContainerColor">{ThemeResource SystemColorWindowTextColor}</Color>
+
+            <Color x:Key="TechSurfaceColor">{ThemeResource SystemColorWindowColor}</Color>
+            <Color x:Key="TechTextColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="TechPathColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="TechVersionColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="TechCommandColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="TechHashColor">{ThemeResource SystemColorWindowTextColor}</Color>
+
+            <!-- ── 画刷（与另两套分支同名同数） ── -->
+
+            <SolidColorBrush x:Key="Primary" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="OnPrimary" Color="{ThemeResource SystemColorHighlightTextColor}" />
+            <SolidColorBrush x:Key="PrimaryContainer" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="OnPrimaryContainer" Color="{ThemeResource SystemColorButtonTextColor}" />
+
+            <SolidColorBrush x:Key="Secondary" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="OnSecondary" Color="{ThemeResource SystemColorButtonTextColor}" />
+            <SolidColorBrush x:Key="SecondaryContainer" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="OnSecondaryContainer" Color="{ThemeResource SystemColorButtonTextColor}" />
+
+            <SolidColorBrush x:Key="Tertiary" Color="{ThemeResource SystemColorButtonFaceColor}" />
+            <SolidColorBrush x:Key="OnTertiary" Color="{ThemeResource SystemColorButtonTextColor}" />
+
+            <SolidColorBrush x:Key="Error" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="OnError" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="ErrorContainer" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="OnErrorContainer" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+            <SolidColorBrush x:Key="Surface" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="OnSurface" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SurfaceVariant" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="OnSurfaceVariant" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="SurfaceDim" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceBright" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerLowest" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerLow" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceContainer" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerHigh" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SurfaceContainerHighest" Color="{ThemeResource SystemColorWindowColor}" />
+
+            <SolidColorBrush x:Key="Outline" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="OutlineVariant" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+            <SolidColorBrush x:Key="InverseSurface" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="InverseOnSurface" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="Scrim" Color="{ThemeResource SystemColorWindowColor}" />
+
+            <SolidColorBrush x:Key="Success" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="OnSuccess" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="SuccessContainer" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="OnSuccessContainer" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+            <SolidColorBrush x:Key="Warn" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="OnWarn" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="WarnContainer" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="OnWarnContainer" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+            <SolidColorBrush x:Key="TechSurface" Color="{ThemeResource SystemColorWindowColor}" />
+            <SolidColorBrush x:Key="TechText" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TechPath" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TechVersion" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TechCommand" Color="{ThemeResource SystemColorWindowTextColor}" />
+            <SolidColorBrush x:Key="TechHash" Color="{ThemeResource SystemColorWindowTextColor}" />
+
+            <SolidColorBrush x:Key="AccentSubtle" Color="{ThemeResource SystemColorHighlightColor}" />
+            <SolidColorBrush x:Key="OnSurfaceHover" Color="{ThemeResource SystemColorHighlightColor}" Opacity="0.20" />
+            <SolidColorBrush x:Key="OnSurfacePressed" Color="{ThemeResource SystemColorHighlightColor}" Opacity="0.30" />
+
+        </ResourceDictionary>
+
+    </ResourceDictionary.ThemeDictionaries>
+
+    <!--
+        主题无关的颜色令牌（不需要随深浅色变化）
+    -->
+    <Color x:Key="TransparentColor">#00000000</Color>
+    <SolidColorBrush x:Key="TransparentBrush" Color="#00000000" />
+
+</ResourceDictionary>

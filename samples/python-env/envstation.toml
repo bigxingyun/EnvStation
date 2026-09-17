@@ -1,0 +1,40 @@
+﻿spec_version = "1.0"
+id           = "x-envstation-demo.python-env"
+version      = "1.0.0"
+name         = "Python 环境检查与 PATH 配置（示例包）"
+description  = "演示包：检测 Python 与 PATH，经确认后把指定目录加入用户级 PATH"
+author       = { name = "EnvStation 示例", id = "envstation-demo", contact = "demo@example.invalid" }
+license      = "MIT"
+tier         = "T0-b"
+
+[requirements]
+os          = ">=10.0.17763"
+arch        = ["x64", "arm64"]
+disk_bytes  = 500_000_000
+
+[runtime]
+kind        = "python"
+version     = ">=3.10"
+
+[permissions]
+"CAP.INSPECT"    = "检测本机是否已安装 Python，并检查 PATH 是否健康"
+"CAP.PATH.MODIFY" = "经确认后把指定目录加入用户级 PATH（写入前创建快照，可回滚）"
+# 工作流最后一步会调用 envstation.ui.notify 输出结论。
+# 这条声明是 V4 沙箱试运行发现缺漏后补上的——能力授权按清单渲染，
+# 没声明的能力用户看不到，也就无从授权（详见 M0-P01 之后的 V4 结论）。
+"CAP.UI.INTERACT" = "展示本次检测的结论与后续建议"
+
+[network]
+allow = []
+
+[side_effects]
+writes_env      = true
+writes_files    = false
+modifies_config = []
+irreversible    = false
+reversible_by   = "内置快照回滚"
+
+[quality]
+has_tests     = true
+has_uninstall = true
+readme        = "README.md"

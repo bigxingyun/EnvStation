@@ -1,0 +1,21 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!--
+      测试宿主为**类库**（无入口点）：由各测试套件工程引用。
+      零外部依赖（NuGet 不可达时仍可用），非 AOT 发布（AOT 验证由 PoC 工程负责）。
+
+      除测试宿主机与断言器外，这里还放**测试共享件**：
+        · SandboxEnvironment —— 内存版环境变量操作实现。
+          它必须被多套用例复用（环境变量动作、验证动作、未来的工作流解释器用例），
+          而且它的存在本身就是一条安全约束：让"跑测试"永远不会碰真机环境。
+    -->
+    <RootNamespace>EnvStation.TestKit</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\EnvStation.Abstractions\EnvStation.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\EnvStation.Core\EnvStation.Core.csproj" />
+  </ItemGroup>
+
+</Project>

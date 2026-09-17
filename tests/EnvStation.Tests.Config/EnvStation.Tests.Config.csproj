@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>EnvStation.Tests.Config</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\EnvStation.Abstractions\EnvStation.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\EnvStation.Core\EnvStation.Core.csproj" />
+    <ProjectReference Include="..\EnvStation.TestKit\EnvStation.TestKit.csproj" />
+  </ItemGroup>
+
+</Project>

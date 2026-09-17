@@ -1,0 +1,81 @@
+﻿<!--
+    环境站 EnvStation — 动效令牌（M3 Motion）
+
+    来源：design/tokens.json → motion
+    规范：UI设计规范 2.6 节与 MO-1~MO-6 纪律。
+
+    三条纪律（写在这里是为了让改动画的人先看到）：
+      · MO-1：**主题切换无动画**。切换只换资源字典，不做过渡，否则整屏闪动。
+      · MO-2：**日志/进度流式追加无动画**。高频追加加动画会抖动并掉帧。
+      · MO-3：只对 Opacity 与 Transform 做动画，**不要**对 Width/Height/Margin 做动画（触发布局重排）。
+
+    关于 KeySpline 与 CubicBezierEasingFunction：
+      · 本文件提供两套等价表示 —— XAML 的 KeySpline（字符串，用于 Storyboard）
+        与代码侧可用的 CubicBezierEasingFunction（在控件模板中通过 x:Name 引用）。
+      · WinUI 的 KeySpline 只接受四个逗号分隔的 double，不支持 CSS 的 cubic-bezier() 语法。
+-->
+<ResourceDictionary
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:media="using:Microsoft.UI.Xaml.Media.Animation"
+    xmlns:sys="using:System">
+
+    <!-- ═══════════════════ 缓动曲线（M3 Easing） ═══════════════════
+         Emphasized 用于"重要且需要被注意到"的转场（抽屉展开、对话框进入）；
+         Standard 用于常规状态变化（hover、选中、显隐）。 -->
+
+    <!-- Emphasized: cubic-bezier(0.2, 0, 0, 1) -->
+    <KeySpline x:Key="Easing.Emphasized">0.2,0,0,1</KeySpline>
+    <!-- Emphasized Decelerate: cubic-bezier(0.05, 0.7, 0.1, 1) —— 进入动画 -->
+    <KeySpline x:Key="Easing.EmphasizedDecelerate">0.05,0.7,0.1,1</KeySpline>
+    <!-- Emphasized Accelerate: cubic-bezier(0.3, 0, 0.8, 0.15) —— 退出动画 -->
+    <KeySpline x:Key="Easing.EmphasizedAccelerate">0.3,0,0.8,0.15</KeySpline>
+    <!-- Standard: cubic-bezier(0.2, 0, 0, 1) -->
+    <KeySpline x:Key="Easing.Standard">0.2,0,0,1</KeySpline>
+    <!-- Standard Decelerate: cubic-bezier(0, 0, 0, 1) -->
+    <KeySpline x:Key="Easing.StandardDecelerate">0,0,0,1</KeySpline>
+    <!-- Standard Accelerate: cubic-bezier(0.3, 0, 1, 1) -->
+    <KeySpline x:Key="Easing.StandardAccelerate">0.3,0,1,1</KeySpline>
+
+    <!-- 代码侧使用的缓动函数实例（供 ControlTemplate / VisualState 直接引用） -->
+    <media:CubicEase x:Key="Ease.Emphasized" EasingMode="EaseOut"
+                     ControlPoint1="0.2,0" ControlPoint2="0,1" />
+    <media:CubicEase x:Key="Ease.EmphasizedDecelerate" EasingMode="EaseOut"
+                     ControlPoint1="0.05,0.7" ControlPoint2="0.1,1" />
+    <media:CubicEase x:Key="Ease.EmphasizedAccelerate" EasingMode="EaseIn"
+                     ControlPoint1="0.3,0" ControlPoint2="0.8,0.15" />
+    <media:CubicEase x:Key="Ease.Standard" EasingMode="EaseOut"
+                     ControlPoint1="0.2,0" ControlPoint2="0,1" />
+    <media:CubicEase x:Key="Ease.StandardDecelerate" EasingMode="EaseOut"
+                     ControlPoint1="0" ControlPoint2="0" />
+    <media:CubicEase x:Key="Ease.StandardAccelerate" EasingMode="EaseIn"
+                     ControlPoint1="0.3,0" ControlPoint2="1,1" />
+
+    <!-- ═══════════════════ 时长（毫秒） ═══════════════════
+         Short  —— 状态变化：hover、focus、按下（50~200ms）
+         Medium —— 常规转场：抽屉、页面切换（250~400ms）
+         Long   —— 复杂转场：模态进入、大幅布局迁移（450~500ms） -->
+
+    <sys:Double x:Key="Duration.Short1">50</sys:Double>
+    <sys:Double x:Key="Duration.Short2">100</sys:Double>
+    <sys:Double x:Key="Duration.Short3">150</sys:Double>
+    <sys:Double x:Key="Duration.Short4">200</sys:Double>
+
+    <sys:Double x:Key="Duration.Medium1">250</sys:Double>
+    <sys:Double x:Key="Duration.Medium2">300</sys:Double>
+    <sys:Double x:Key="Duration.Medium3">350</sys:Double>
+    <sys:Double x:Key="Duration.Medium4">400</sys:Double>
+
+    <sys:Double x:Key="Duration.Long1">450</sys:Double>
+    <sys:Double x:Key="Duration.Long2">500</sys:Double>
+
+    <!-- ═══════════════════ 语义化时长别名（推荐在模板中使用这些，而不是裸数字） ═══════════════════ -->
+
+    <!-- 状态层（State Layer）透明度过渡：hover / focus / pressed -->
+    <Duration x:Key="Duration.StateLayer">0:0:0.10</Duration>
+    <!-- 弹出层进入（对话框、命令面板、菜单） -->
+    <Duration x:Key="Duration.OverlayEnter">0:0:0.30</Duration>
+    <!-- 底部抽屉展开 -->
+    <Duration x:Key="Duration.SheetExpand">0:0:0.35</Duration>
+
+</ResourceDictionary>

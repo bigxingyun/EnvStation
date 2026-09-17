@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>EnvStation.Cli</RootNamespace>
+    <AssemblyName>envstation</AssemblyName>
+    <EnableAotBaseline>true</EnableAotBaseline>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EnvStation.Abstractions\EnvStation.Abstractions.csproj" />
+    <ProjectReference Include="..\EnvStation.Core\EnvStation.Core.csproj" />
+  </ItemGroup>
+
+</Project>

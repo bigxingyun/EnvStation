@@ -1,0 +1,15 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- 使用 net8.0-windows：可解析 Windows 专属 API（注册表）并让 CA1416 正确判定 -->
+    <OutputType>Exe</OutputType>
+    <RootNamespace>EnvStation.Tests.Installation</RootNamespace>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\EnvStation.Abstractions\EnvStation.Abstractions.csproj" />
+    <ProjectReference Include="..\..\src\EnvStation.Core\EnvStation.Core.csproj" />
+    <ProjectReference Include="..\EnvStation.TestKit\EnvStation.TestKit.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,58 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <RootNamespace>EnvStation.Poc.AotProbe</RootNamespace>
+    <AssemblyName>aotprobe</AssemblyName>
+
+    <!-- ★ 核心：本工程的目的就是验证 AOT 兼容性，因此默认开启 -->
+    <EnableAotBaseline>true</EnableAotBaseline>
+
+    <!--
+      库开关（可用 -p:WithTomlyn=false 单独关闭）。
+      设计意图：三个库彼此独立，任何一个无法 restore / 不兼容 AOT，
+      都不应阻塞其余两个的结论。构建时用 -p: 覆盖即可。
+    -->
+    <WithTomlyn Condition="'$(WithTomlyn)' == ''">true</WithTomlyn>
+    <WithSharpCompress Condition="'$(WithSharpCompress)' == ''">true</WithSharpCompress>
+    <WithNSec Condition="'$(WithNSec)' == ''">false</WithNSec>
+  </PropertyGroup>
+
+  <!-- 条件编译符号：代码侧据此产出"该库未参与本次验证"的明确结论，
+       而不是让整个 PoC 构建失败。 -->
+  <PropertyGroup Condition="'$(WithTomlyn)' == 'true'">
+    <DefineConstants>$(DefineConstants);HAS_TOMLYN</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(WithSharpCompress)' == 'true'">
+    <DefineConstants>$(DefineConstants);HAS_SHARPCOMPRESS</DefineConstants>
+  </PropertyGroup>
+  <PropertyGroup Condition="'$(WithNSec)' == 'true'">
+    <DefineConstants>$(DefineConstants);HAS_NSEC</DefineConstants>
+  </PropertyGroup>
+
+  <ItemGroup Condition="'$(WithTomlyn)' == 'true'">
+    <PackageReference Include="Tomlyn" Version="0.19.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WithSharpCompress)' == 'true'">
+    <PackageReference Include="SharpCompress" Version="0.48.0" />
+  </ItemGroup>
+
+  <ItemGroup Condition="'$(WithNSec)' == 'true'">
+    <PackageReference Include="NSec.Cryptography" Version="24.4.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\EnvStation.Abstractions\EnvStation.Abstractions.csproj" />
+    <!--
+      引用 Core 有两个目的：
+        1. tests/TestGlobalUsings.cs 是各测试工程共享的全局 using，里面用到了 EnvStation.Core.* 别名；
+           不引用 Core 会导致该文件编译失败（CS0234），把探针工程本身拖垮。
+        2. 更重要的是：Core 是本项目的内核，它自己必须能通过 Native AOT 发布。
+           把 Core 一起纳入探针，等于顺带完成了对内核的 AOT 兼容性验证。
+    -->
+    <ProjectReference Include="..\..\src\EnvStation.Core\EnvStation.Core.csproj" />
+    <ProjectReference Include="..\EnvStation.TestKit\EnvStation.TestKit.csproj" />
+  </ItemGroup>
+
+</Project>

@@ -1,0 +1,50 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <!-- Core 只依赖 Abstractions（DL-2）；不得引用任何 UI 命名空间（DL-5） -->
+    <EnableAotBaseline>true</EnableAotBaseline>
+    <RootNamespace>EnvStation.Core</RootNamespace>
+    <!-- 需要访问 Windows 注册表 API -->
+    <SupportedOSPlatformVersion>10.0.17763.0</SupportedOSPlatformVersion>
+
+    <!--
+      允许不安全代码：**唯一用途**是 PathParser 中的 GetLongPathNameW P/Invoke。
+
+      为什么必须开：本项目用 [LibraryImport]（而非 [DllImport]）声明该 P/Invoke ——
+      它在编译期生成 marshalling 代码，无运行期封送开销，且不依赖 Native AOT 下受限的
+      IL stub 机制。这对我们已确定的 AOT 发布路线是硬要求。
+      而 LibraryImport 的源生成器需要通过 fixed 来固定 char[] 缓冲区，故要求本开关。
+
+      纪律：除该处 P/Invoke 外，Core 内不得出现任何 unsafe 代码。
+    -->
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\EnvStation.Abstractions\EnvStation.Abstractions.csproj" />
+  </ItemGroup>
+
+  <!--
+    内部可见性：仅对测试工程开放。
+
+    注意：必须声明在**被测程序集**上。放在 tests/Directory.Build.props 是无效的 ——
+    那里会加到测试工程自身（该 MSBuild 项的宿主是当前正在编译的程序集），对被测方毫无作用。
+
+    用途：
+      · M0-P05 需要注入"切换中途崩溃"故障点（ShadowInstaller.FaultInjector）
+      · M0-P02 需要验证值类型映射（RegistryEnvStore.ToEnvValueKind / ToRegistryValueKind）
+    生产代码不会暴露这些入口。
+  -->
+  <ItemGroup>
+    <InternalsVisibleTo Include="EnvStation.Tests.RegistrySandbox" />
+    <InternalsVisibleTo Include="EnvStation.Tests.Transactions" />
+    <InternalsVisibleTo Include="EnvStation.Tests.Installation" />
+    <InternalsVisibleTo Include="EnvStation.Tests.PathKernel" />
+    <InternalsVisibleTo Include="EnvStation.Tests.Concurrency" />
+    <InternalsVisibleTo Include="EnvStation.Tests.Actions" />
+    <InternalsVisibleTo Include="EnvStation.Tests.EnvironmentActions" />
+    <InternalsVisibleTo Include="EnvStation.Tests.VerifyActions" />
+    <InternalsVisibleTo Include="EnvStation.Tests.Scripting" />
+  </ItemGroup>
+
+</Project>
