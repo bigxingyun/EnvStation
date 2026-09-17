@@ -1,16 +1,20 @@
 # 开发过程文档与截图，不上传仓库
-docs/
+/docs/
 
 # 构建产物与测量产物
+/bin/
+/obj/
+/publish/
+/artifacts/
+
+# bin 与 obj 出现在每个工程目录下，必须匹配任意层级，不能根锚定
 bin/
 obj/
-publish/
-artifacts/
 
 # 运行期数据（绝不入库：可能含用户环境变量与凭据）
-snapshots/
-logs/
-staging/
+/snapshots/
+/logs/
+/staging/
 *.log
 
 # 私钥绝不入库（即使只是测试用的临时密钥）
@@ -19,10 +23,18 @@ staging/
 *private*.pem
 
 # 测试与诊断产物
-TestResults/
+#
+# 目录类规则要区分两种情况：
+#   · 只在根目录出现的，根锚定（前导斜杠），避免误伤同名源码目录；
+#   · 可能出现在任意层级的，不锚定。
+# diagnostics/ 属于前者却曾被写成不锚定，结果连源码目录
+# src/EnvStation.Abstractions/Diagnostics/ 一起忽略——Windows 与 macOS 上 git
+# 默认不区分大小写，症状是"克隆下来编译报缺命名空间"。本仓库真的发生过一次：
+# 一个 6.5 KB 的 Finding.cs 因此没上传。
+/TestResults/
+/diagnostics/
 *.trx
 *.coverage
-diagnostics/
 
 # 原生 / AOT 中间产物
 *.pdb
@@ -32,10 +44,10 @@ diagnostics/
 *.obj
 
 # IDE
-.vs/
-.idea/
+/.vs/
+/.idea/
 *.user
 *.suo
 
 # PoC 结果文件（每次运行覆盖，不入库）
-poc-results/
+/poc-results/
