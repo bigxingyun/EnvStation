@@ -36,7 +36,7 @@ Windows 开发环境配置与回滚工具。装语言、配环境变量、理 PA
 
 ```powershell
 # 1. 克隆
-git clone <本仓库地址> EnvStation
+git clone https://github.com/bigxingyun/EnvStation.git
 cd EnvStation
 
 # 2. 构建
