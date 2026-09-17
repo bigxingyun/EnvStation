@@ -481,6 +481,25 @@ internal sealed class PathValidateAction : PathActionBase
             .Select(e => $"{e.Raw} —— {DescribeIssues(e.Issues)}")
             .ToArray();
 
+        // 全量条目（含健康的），供界面把 PATH 渲染成分条列表。
+        //
+        // 为什么不能只用 details：details **只列不健康的条目**，界面拿它渲染就只能显示"有问题的那些"，
+        // 而用户看 PATH 分条列表要的是"完整顺序 + 哪几项有问题"——少了健康项就丢了优先级的全貌。
+        // 早先的做法是界面自己按 entry_count 补占位行，那会造出"正常条目，内核未逐条返回原文"
+        // 这种写给开发者看的话，出现在用户界面上。
+        //
+        // 格式：每行 `序号\t原始写法\t问题`，行间以 \n 连接。
+        // 用制表符与换行作分隔符是安全的——Windows 路径里不可能含有这两个字符，
+        // 而 details 用的 ` —— ` 与 ` || ` 在路径里是可能出现的（虽然罕见），不适合做定界。
+        var allEntries = string.Join(
+            '\n',
+            entries.Select(e => string.Format(
+                CultureInfo.InvariantCulture,
+                "{0}\t{1}\t{2}",
+                e.Index,
+                e.Raw,
+                e.Issues == PathEntryIssue.None ? string.Empty : DescribeIssues(e.Issues))));
+
         var scopeName = EnvironmentPathResolver.ToScopeName(scope);
         var scopeLabel = EnvironmentPathResolver.ToScopeLabel(scope);
         var message = entries.Count == 0
@@ -505,7 +524,8 @@ internal sealed class PathValidateAction : PathActionBase
                 ("unresolved_count", unresolved.ToString(CultureInfo.InvariantCulture)),
                 ("length", path.Value.RawValue.Length.ToString(CultureInfo.InvariantCulture)),
                 ("over_legacy_limit", Bool(path.Value.RawValue.Length > RegistryEnvStore.LegacyEditorLimit)),
-                ("details", string.Join(" || ", details))));
+                ("details", string.Join(" || ", details)),
+                ("entries", allEntries)));
     }
 }
 

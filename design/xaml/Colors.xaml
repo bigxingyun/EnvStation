@@ -87,6 +87,17 @@
             <Color x:Key="TechCommandColor">#FFC48A</Color>
             <Color x:Key="TechHashColor">#C6B4FF</Color>
 
+            <!-- ── 交互态与状态点（缺了它们，交互反馈只能回落成 WinUI 默认样式） ── -->
+            <Color x:Key="StateHoverColor">#1D2321</Color>
+            <Color x:Key="StatePressedColor">#2A3230</Color>
+            <Color x:Key="StateSelectedColor">#123B36</Color>
+            <Color x:Key="StateDisabledColor">#5C605D</Color>
+            <Color x:Key="StateFocusRingColor">#6FF7EA</Color>
+            <Color x:Key="StatusDotNeutralColor">#A9ADAA</Color>
+            <Color x:Key="StatusDotSuccessColor">#4FDBD2</Color>
+            <Color x:Key="StatusDotWarnColor">#F0C24B</Color>
+            <Color x:Key="StatusDotErrorColor">#FFB4AB</Color>
+
             <!-- ══════════════════ 画刷（控件实际引用的键） ══════════════════ -->
 
             <SolidColorBrush x:Key="Primary" Color="{StaticResource PrimaryColor}" />
@@ -142,6 +153,17 @@
             <SolidColorBrush x:Key="TechVersion" Color="{StaticResource TechVersionColor}" />
             <SolidColorBrush x:Key="TechCommand" Color="{StaticResource TechCommandColor}" />
             <SolidColorBrush x:Key="TechHash" Color="{StaticResource TechHashColor}" />
+
+            <!-- ── 交互态与状态点画刷 ── -->
+            <SolidColorBrush x:Key="StateHover" Color="{StaticResource StateHoverColor" />
+            <SolidColorBrush x:Key="StatePressed" Color="{StaticResource StatePressedColor" />
+            <SolidColorBrush x:Key="StateSelected" Color="{StaticResource StateSelectedColor" />
+            <SolidColorBrush x:Key="StateDisabled" Color="{StaticResource StateDisabledColor" />
+            <SolidColorBrush x:Key="StateFocusRing" Color="{StaticResource StateFocusRingColor" />
+            <SolidColorBrush x:Key="StatusDotNeutral" Color="{StaticResource StatusDotNeutralColor" />
+            <SolidColorBrush x:Key="StatusDotSuccess" Color="{StaticResource StatusDotSuccessColor" />
+            <SolidColorBrush x:Key="StatusDotWarn" Color="{StaticResource StatusDotWarnColor" />
+            <SolidColorBrush x:Key="StatusDotError" Color="{StaticResource StatusDotErrorColor" />
 
             <!-- ── M3 State Layer 与半透明变体 ──
                  用于 State Layer（hover 8% / focus 与 pressed 10%）与 Subtle 底色。
@@ -210,6 +232,17 @@
             <Color x:Key="TechCommandColor">#8A4A00</Color>
             <Color x:Key="TechHashColor">#5B3FA8</Color>
 
+            <!-- ── 交互态与状态点（浅色一套独立调过：浅色下「更深」才是悬停，方向与深色相反） ── -->
+            <Color x:Key="StateHoverColor">#E8EAE7</Color>
+            <Color x:Key="StatePressedColor">#D8E6E3</Color>
+            <Color x:Key="StateSelectedColor">#DCEDEA</Color>
+            <Color x:Key="StateDisabledColor">#8F9290</Color>
+            <Color x:Key="StateFocusRingColor">#006A60</Color>
+            <Color x:Key="StatusDotNeutralColor">#5C605D</Color>
+            <Color x:Key="StatusDotSuccessColor">#006A60</Color>
+            <Color x:Key="StatusDotWarnColor">#7A5900</Color>
+            <Color x:Key="StatusDotErrorColor">#BA1A1A</Color>
+
             <SolidColorBrush x:Key="Primary" Color="{StaticResource PrimaryColor}" />
             <SolidColorBrush x:Key="OnPrimary" Color="{StaticResource OnPrimaryColor}" />
             <SolidColorBrush x:Key="PrimaryContainer" Color="{StaticResource PrimaryContainerColor}" />
@@ -263,6 +296,17 @@
             <SolidColorBrush x:Key="TechVersion" Color="{StaticResource TechVersionColor}" />
             <SolidColorBrush x:Key="TechCommand" Color="{StaticResource TechCommandColor}" />
             <SolidColorBrush x:Key="TechHash" Color="{StaticResource TechHashColor}" />
+
+            <!-- ── 交互态与状态点画刷 ── -->
+            <SolidColorBrush x:Key="StateHover" Color="{StaticResource StateHoverColor" />
+            <SolidColorBrush x:Key="StatePressed" Color="{StaticResource StatePressedColor" />
+            <SolidColorBrush x:Key="StateSelected" Color="{StaticResource StateSelectedColor" />
+            <SolidColorBrush x:Key="StateDisabled" Color="{StaticResource StateDisabledColor" />
+            <SolidColorBrush x:Key="StateFocusRing" Color="{StaticResource StateFocusRingColor" />
+            <SolidColorBrush x:Key="StatusDotNeutral" Color="{StaticResource StatusDotNeutralColor" />
+            <SolidColorBrush x:Key="StatusDotSuccess" Color="{StaticResource StatusDotSuccessColor" />
+            <SolidColorBrush x:Key="StatusDotWarn" Color="{StaticResource StatusDotWarnColor" />
+            <SolidColorBrush x:Key="StatusDotError" Color="{StaticResource StatusDotErrorColor" />
 
             <SolidColorBrush x:Key="AccentSubtle" Color="#006A60" Opacity="0.10" />
             <SolidColorBrush x:Key="OnSurfaceHover" Color="#191C1B" Opacity="0.06" />
@@ -334,6 +378,17 @@
             <Color x:Key="TechCommandColor">{ThemeResource SystemColorWindowTextColor}</Color>
             <Color x:Key="TechHashColor">{ThemeResource SystemColorWindowTextColor}</Color>
 
+            <!-- ── 交互态与状态点：高对比度下不得自带色值，只能引用系统色 ── -->
+            <Color x:Key="StateHoverColor">{ThemeResource SystemColorHighlightColor}</Color>
+            <Color x:Key="StatePressedColor">{ThemeResource SystemColorHighlightColor}</Color>
+            <Color x:Key="StateSelectedColor">{ThemeResource SystemColorHighlightColor}</Color>
+            <Color x:Key="StateDisabledColor">{ThemeResource SystemColorGrayTextColor}</Color>
+            <Color x:Key="StateFocusRingColor">{ThemeResource SystemColorHighlightColor}</Color>
+            <Color x:Key="StatusDotNeutralColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="StatusDotSuccessColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="StatusDotWarnColor">{ThemeResource SystemColorWindowTextColor}</Color>
+            <Color x:Key="StatusDotErrorColor">{ThemeResource SystemColorWindowTextColor}</Color>
+
             <!-- ── 画刷（与另两套分支同名同数） ── -->
 
             <SolidColorBrush x:Key="Primary" Color="{ThemeResource SystemColorHighlightColor}" />
@@ -391,6 +446,17 @@
             <SolidColorBrush x:Key="TechHash" Color="{ThemeResource SystemColorWindowTextColor}" />
 
             <SolidColorBrush x:Key="AccentSubtle" Color="{ThemeResource SystemColorHighlightColor}" />
+
+            <!-- ── 交互态与状态点画刷 ── -->
+            <SolidColorBrush x:Key="StateHover" Color="{ThemeResource SystemColorHighlightColor" />
+            <SolidColorBrush x:Key="StatePressed" Color="{ThemeResource SystemColorHighlightColor" />
+            <SolidColorBrush x:Key="StateSelected" Color="{ThemeResource SystemColorHighlightColor" />
+            <SolidColorBrush x:Key="StateDisabled" Color="{ThemeResource SystemColorGrayTextColor" />
+            <SolidColorBrush x:Key="StateFocusRing" Color="{ThemeResource SystemColorHighlightColor" />
+            <SolidColorBrush x:Key="StatusDotNeutral" Color="{ThemeResource SystemColorWindowTextColor" />
+            <SolidColorBrush x:Key="StatusDotSuccess" Color="{ThemeResource SystemColorWindowTextColor" />
+            <SolidColorBrush x:Key="StatusDotWarn" Color="{ThemeResource SystemColorWindowTextColor" />
+            <SolidColorBrush x:Key="StatusDotError" Color="{ThemeResource SystemColorWindowTextColor" />
             <SolidColorBrush x:Key="OnSurfaceHover" Color="{ThemeResource SystemColorHighlightColor}" Opacity="0.20" />
             <SolidColorBrush x:Key="OnSurfacePressed" Color="{ThemeResource SystemColorHighlightColor}" Opacity="0.30" />
 

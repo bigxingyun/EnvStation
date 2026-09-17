@@ -101,6 +101,29 @@ $RolesDark = [ordered]@{
     'TechSurface'          = '#080A09';  'TechText'    = '#CBD5D1'
     'TechPath'             = '#6FF7EA';  'TechVersion' = '#9CCDFF'
     'TechCommand'          = '#FFC48A';  'TechHash'    = '#C6B4FF'
+
+    # ── 交互态（本次新增）───────────────────────────────────────────────
+    # 为什么必须自带这几个角色：M3 的 color roles 只描述"静态外观"，不含悬停/按下/选中；
+    # 缺了它们，所有交互反馈只能回落成 WinUI 默认控件的样式，
+    # 结果是同一个窗口里并存两套互不相关的视觉语言（见重构方案 4.1 节实测）。
+    #
+    # 取值口径：交互态是**叠加色**（画在 SurfaceContainer* 之上），不作为文本底色，
+    # 因此不套用 WCAG 的 4.5:1 文本门槛；它的判据是"与底色可分辨"。实测亮度关系：
+    #   StateHover   vs Surface 1.16 : 1（可分辨，不喧宾夺主）
+    #   StatePressed vs Surface 1.41 : 1（明显更深，按下感）
+    #   StateSelected 带主色倾向，与 StateHover 区分（选中 ≠ 悬停）
+    'StateHover'           = '#1D2321'
+    'StatePressed'         = '#2A3230'
+    'StateSelected'        = '#123B36'
+    # 禁用态：前景降到 38% 不透明度的等效色（M3 disabled 规范值）
+    'StateDisabled'        = '#5C605D'
+    # 焦点环：对 Surface 14.29 : 1，远超非文本图形 3:1 门槛
+    'StateFocusRing'       = '#6FF7EA'
+    # 状态点：三重编码里的"形状+颜色"两项，对 Surface 8.17~11.07 : 1
+    'StatusDotNeutral'     = '#A9ADAA'
+    'StatusDotSuccess'     = '#4FDBD2'
+    'StatusDotWarn'        = '#F0C24B'
+    'StatusDotError'       = '#FFB4AB'
 }
 
 $RolesLight = [ordered]@{
@@ -128,6 +151,19 @@ $RolesLight = [ordered]@{
     'TechSurface'          = $Palette.neutral.n94;  'TechText'    = $Palette.neutral.n10
     'TechPath'             = '#00635A';  'TechVersion' = '#0B4F9E'
     'TechCommand'          = '#8A4A00';  'TechHash'    = '#5B3FA8'
+
+    # ── 交互态（本次新增，浅色一套独立调过，不是深色的反相）──────────────
+    # 实测亮度关系：StateHover vs Surface 1.15 : 1、StatePressed vs Surface 1.22 : 1。
+    # 浅色下"更深"才是悬停/按下，与深色下"更亮"方向相反，这正是必须分两套值的原因。
+    'StateHover'           = '#E8EAE7'
+    'StatePressed'         = '#D8E6E3'
+    'StateSelected'        = '#DCEDEA'
+    'StateDisabled'        = '#8F9290'
+    'StateFocusRing'       = '#006A60'
+    'StatusDotNeutral'     = '#5C605D'
+    'StatusDotSuccess'     = '#006A60'
+    'StatusDotWarn'        = '#7A5900'
+    'StatusDotError'       = '#BA1A1A'
 }
 
 # ============================================================================
@@ -165,6 +201,18 @@ $MonoScale = @(
 # ============================================================================
 $Shape = [ordered]@{ XS=4; S=8; M=10; L=14; XL=20; Full=999 }
 $Spacing = [ordered]@{ '1'=4; '2'=8; '3'=12; '4'=16; '5'=20; '6'=24; '8'=32 }
+
+# ── 垂直节奏（本次新增）────────────────────────────────────────────────────
+# 为什么单独立一节而不是复用 $Spacing：
+# 实测发现间距是「元素自带 Margin + 容器 Stack.Spacing」的**偶然相加**——
+# 卡片间距成了 32.8px（令牌写 16）、标题到副标题成了 28px，代码里没有任何一处声明过节奏。
+# 病根不是数值不够多，而是**同一层级有两处都在给间距**。
+# 因此这里只定三档语义，并配一条纪律：一个容器只能选一档，且容器负责间距、元素不自带 Margin。
+$Rhythm = [ordered]@{
+    InGroup        = 4    # 同组内的多行（如一个「标签 + 值」行内部的元素）
+    BetweenGroups  = 16   # 同一区块内的相邻小组
+    BetweenSections= 32   # 页面级区块之间
+}
 
 $Motion = [ordered]@{
     EasingEmphasized      = '0.2,0,0,1'
@@ -211,6 +259,7 @@ $tokens = [ordered]@{
     monoScale      = $MonoScale
     shape          = $Shape
     spacing        = $Spacing
+    rhythm         = $Rhythm
     motion         = $Motion
     density        = $Density
     fonts          = [ordered]@{
@@ -318,6 +367,19 @@ $HcMap = [ordered]@{
     'TechVersion'             = 'SystemColorWindowTextColor'
     'TechCommand'             = 'SystemColorWindowTextColor'
     'TechHash'                = 'SystemColorWindowTextColor'
+    # 交互态与状态点（本次新增）。高对比度下这些角色**不能**用自己的色值——
+    # 配色由用户在系统里定，产品只能引用系统色，否则等于在高对比度模式里再糊一层。
+    'StateHover'              = 'SystemColorHighlightColor'
+    'StatePressed'            = 'SystemColorHighlightColor'
+    'StateSelected'           = 'SystemColorHighlightColor'
+    'StateDisabled'           = 'SystemColorGrayTextColor'
+    # 焦点环用 Highlight 而非 WindowText：高对比度下"焦点在哪"必须是高亮语义，
+    # 若用 WindowText 会与普通文字混在一起，键盘用户看不出焦点位置。
+    'StateFocusRing'          = 'SystemColorHighlightColor'
+    'StatusDotNeutral'        = 'SystemColorWindowTextColor'
+    'StatusDotSuccess'        = 'SystemColorWindowTextColor'
+    'StatusDotWarn'           = 'SystemColorWindowTextColor'
+    'StatusDotError'          = 'SystemColorWindowTextColor'
 }
 
 # 高对比度映射的独立产物：给人看，也给校验脚本读。
@@ -366,6 +428,18 @@ $cs = New-Object System.Text.StringBuilder
 [void]$cs.AppendLine('')
 [void]$cs.AppendLine('    /// <summary>等宽字体族（tokens.json 的 fonts.mono 取首个族名）。</summary>')
 [void]$cs.AppendLine("    internal const string MonoFontFamily = `"$monoFontFamily`";")
+[void]$cs.AppendLine('')
+[void]$cs.AppendLine('    /// <summary>垂直节奏（tokens.json 的 rhythm）。</summary>')
+[void]$cs.AppendLine('    /// <remarks>')
+[void]$cs.AppendLine('    /// <para>')
+[void]$cs.AppendLine('    /// 纪律：一个容器只能用其中一档，且<b>容器负责间距、元素不自带 Margin</b>。')
+[void]$cs.AppendLine('    /// 违反这条会让间距变成「Margin + Stack.Spacing」的偶然相加——')
+[void]$cs.AppendLine('    /// 上一版界面就是这么把 16px 的令牌渲染成 32.8px 的。')
+[void]$cs.AppendLine('    /// </para>')
+[void]$cs.AppendLine('    /// </remarks>')
+[void]$cs.AppendLine("    internal const double RhythmInGroup = $($Rhythm.InGroup);")
+[void]$cs.AppendLine("    internal const double RhythmBetweenGroups = $($Rhythm.BetweenGroups);")
+[void]$cs.AppendLine("    internal const double RhythmBetweenSections = $($Rhythm.BetweenSections);")
 [void]$cs.AppendLine('')
 
 function Write-ColorMap {

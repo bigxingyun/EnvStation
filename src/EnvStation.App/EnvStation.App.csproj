@@ -44,8 +44,16 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.6.250228001" />
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.1742" />
+    <PackageReference Include="Microsoft.WindowsAppSDK" Version="1.8.260804001" />
+
+    <!--
+      版本必须随 WASDK 1.8 一起上抬——这一条是实测出来的，不是可选清理：
+      Microsoft.WindowsAppSDK.Base 1.8.251216001 对下面两个包声明了下限
+      （BuildTools >= 10.0.26100.4654、BuildTools.MSIX >= 1.7.20250829.1）。
+      只升 WASDK 而留旧版本号，NuGet 会报 NU1605「检测到包降级」并直接还原失败
+      （NU1605 是"错误形式的警告"，在 TreatWarningsAsErrors 下即错误）。
+    -->
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools" Version="10.0.26100.4654" />
 
     <!--
       PRI（资源索引）工具链。这一条不是可选项，理由是实测出来的：
@@ -60,7 +68,7 @@
       与 Visual Studio 无关；同时在 Internal/Common.props 里把 EnableCoreMrtTooling 关掉，
       避免两套工具链各跑一遍 PRI 生成。
     -->
-    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.3.20250314.1" GeneratePathProperty="true" />
+    <PackageReference Include="Microsoft.Windows.SDK.BuildTools.MSIX" Version="1.7.20250829.1" GeneratePathProperty="true" />
   </ItemGroup>
 
   <!--
@@ -71,6 +79,9 @@
     那个文件只在 MSIX 工具链包里 —— 于是报 MSB4062「找不到程序集」。
     这里在 csproj 主体（早于所有 NuGet .targets）里抢先赋值，两边的 =='' 条件就都不成立，
     最终 MsixTaskAssembly 指向真实存在的文件。
+
+    升到 MSIX 1.7.20250829.1 后这段依然成立：已解包核对，该版本仍是
+    tools\net6.0\ 与 tools\net472\ 两套，Microsoft.Windows.SDK.BuildTools.MSIX.dll 位置不变。
   -->
   <PropertyGroup Condition="'$(PkgMicrosoft_Windows_SDK_BuildTools_MSIX)' != ''">
     <MsixTaskAssemblyLocation Condition="'$(MSBuildRuntimeType)' == 'Core'">$(PkgMicrosoft_Windows_SDK_BuildTools_MSIX)\tools\net6.0\</MsixTaskAssemblyLocation>

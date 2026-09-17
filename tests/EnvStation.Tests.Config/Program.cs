@@ -721,5 +721,141 @@ internal static class Program
             Assert.Contains("candidates", string.Join(",", result.Outputs.Keys), "应给出候选路径");
             Assert.Contains("优先", result.Outputs["maven.explanation"], "应说明生效优先级（XML-M2）");
         });
+
+        SettingsCases(h);
+    }
+
+    /// <summary>
+    /// 应用设置（<c>settings.json</c>）的读写用例。
+    /// </summary>
+    /// <remarks>
+    /// <para>
+    /// <b>为什么这一组放在配置套件</b>：它测的是"设置文件怎么读写"，
+    /// 与被测对象 <c>AppSettingsStore</c> 同在配置层；放进界面套件会让那个套件的名字与内容对不上。
+    /// </para>
+    /// <para>
+    /// <b>为什么值得测</b>：设置文件是"用起来舒服"的辅助数据，一旦读坏就让应用起不来是本末倒置，
+    /// 而静默吞掉损坏又会让"我的主题每次都丢"变成没法排查的问题。
+    /// 所以这一组的重点是：<b>损坏要能回落，但不能装作没事</b>。
+    /// </para>
+    /// </remarks>
+    private static void SettingsCases(TestHarness h)
+    {
+        h.Case("CF-40", "设置：往返读写一致", () =>
+        {
+            using var ws = new TempWorkspace();
+            var path = ws.Resolve("settings.json");
+
+            var original = CoreCfg.AppSettings.Default with
+            {
+                Theme = CoreCfg.ThemeChoice.Dark,
+                LastPage = "doctor",
+                WindowWidth = 1280,
+                WindowHeight = 820,
+                WindowX = 100,
+                WindowY = 60,
+            };
+
+            Assert.True(CoreCfg.AppSettingsStore.Save(original, out var error, path), $"保存应成功：{error}");
+
+            var loaded = CoreCfg.AppSettingsStore.Load(path, out var recovered);
+            Assert.Null(recovered, "正常文件不该产生回落说明。");
+            Assert.Equal(CoreCfg.ThemeChoice.Dark, loaded.Theme, "主题应保留（三态之一）。");
+            Assert.Equal("doctor", loaded.LastPage, "上次页面应保留。");
+            Assert.Equal(1280, loaded.WindowWidth, "窗口宽度应保留。");
+            Assert.Equal(100, loaded.WindowX, "窗口坐标应保留（含非零坐标）。");
+        });
+
+        h.Case("CF-41", "设置：文件不存在时用默认值，且不算异常", () =>
+        {
+            using var ws = new TempWorkspace();
+            var loaded = CoreCfg.AppSettingsStore.Load(ws.Resolve("not-created.json"), out var recovered);
+
+            Assert.Null(recovered, "文件不存在属于首次启动，不是错误，不该产生回落说明。");
+            Assert.Equal(CoreCfg.ThemeChoice.System, loaded.Theme, "首次启动应跟随系统，而不是强制深色。");
+            Assert.Equal(string.Empty, loaded.LastPage, "没有历史页面。");
+        });
+
+        h.Case("CF-42", "★设置：文件损坏时回落默认值，并给出可排查的说明", () =>
+        {
+            using var ws = new TempWorkspace();
+            var path = ws.Write("settings.json", "{ 这不是 JSON");
+
+            var loaded = CoreCfg.AppSettingsStore.Load(path, out var recovered);
+
+            Assert.Equal(CoreCfg.ThemeChoice.System, loaded.Theme, "损坏时必须回落默认值，不能让应用起不来。");
+            Assert.NotNull(recovered, "损坏必须有说明——静默吞掉会让「设置每次都丢」无法排查。");
+            Assert.Contains("无法解析", recovered!, "说明应讲清是解析失败。");
+            Assert.True(File.Exists(path), "刻意不删除损坏的文件：用户可能想看看里面写了什么。");
+        });
+
+        h.Case("CF-43", "设置：版本高于程序支持时回落，而不是猜字段含义", () =>
+        {
+            using var ws = new TempWorkspace();
+            var path = ws.Write("settings.json", "{\"SchemaVersion\": 999, \"Theme\": \"Dark\"}");
+
+            var loaded = CoreCfg.AppSettingsStore.Load(path, out var recovered);
+
+            Assert.Equal(CoreCfg.ThemeChoice.System, loaded.Theme, "未来版本的设置不该被当成本版本能理解的。");
+            Assert.Contains("版本", recovered!, "说明应指明是版本不匹配。");
+        });
+
+        h.Case("CF-44", "设置：异常的窗口尺寸被夹到合理范围", () =>
+        {
+            using var ws = new TempWorkspace();
+            var path = ws.Write("settings.json",
+                "{\"SchemaVersion\": 1, \"WindowWidth\": 99999, \"WindowHeight\": 1, \"WindowX\": 999999}");
+
+            var loaded = CoreCfg.AppSettingsStore.Load(path, out _);
+
+            Assert.True(loaded.WindowWidth <= 10000, "过大的宽度会把窗口放到屏幕外，必须夹住。");
+            Assert.True(loaded.WindowHeight >= 600 || loaded.WindowHeight == 0,
+                "过小的高度应被抬到最小值（0 表示用默认值）。");
+            // int? 不是引用类型，Assert.Null<T> 的约束用不上；直接判断 HasValue。
+            Assert.False(loaded.WindowX.HasValue, "离谱的坐标应被丢弃，交给系统放置。");
+        });
+
+        h.Case("CF-45", "设置：保存不留下半截文件（写入走临时文件 + 替换）", () =>
+        {
+            using var ws = new TempWorkspace();
+            var path = ws.Resolve("settings.json");
+
+            Assert.True(
+                CoreCfg.AppSettingsStore.Save(
+                    CoreCfg.AppSettings.Default with { Theme = CoreCfg.ThemeChoice.Light }, out _, path),
+                "第一次保存应成功。");
+            Assert.True(
+                CoreCfg.AppSettingsStore.Save(
+                    CoreCfg.AppSettings.Default with { Theme = CoreCfg.ThemeChoice.Dark }, out _, path),
+                "第二次保存（覆盖）应成功。");
+
+            Assert.False(File.Exists(path + ".tmp"), "临时文件不应残留。");
+            var loaded = CoreCfg.AppSettingsStore.Load(path, out var recovered);
+            Assert.Null(recovered, "覆盖写入后文件应是完好的。");
+            Assert.Equal(CoreCfg.ThemeChoice.Dark, loaded.Theme, "应读到后写入的那份。");
+        });
+
+        h.Case("CF-46", "★设置：属性名大小写不敏感（换成源生成后差点丢掉的行为）", () =>
+        {
+            // 背景：反射式序列化默认忽略大小写，源生成默认不忽略。
+            // 从前者换到后者时，"手工写成 PascalCase 的配置文件读不出来"是个静默回归——
+            // 只有在套件里才会暴露（写的路径产出 camelCase，用例手写的是 PascalCase）。
+            using var ws = new TempWorkspace();
+
+            var pascal = ws.Write("pascal.json",
+                "{\"SchemaVersion\": 1, \"Theme\": \"Dark\", \"LastPage\": \"doctor\"}");
+            var camel = ws.Write("camel.json",
+                "{\"schemaVersion\": 1, \"theme\": \"Dark\", \"lastPage\": \"doctor\"}");
+
+            var fromPascal = CoreCfg.AppSettingsStore.Load(pascal, out var reportPascal);
+            var fromCamel = CoreCfg.AppSettingsStore.Load(camel, out var reportCamel);
+
+            Assert.Null(reportPascal, "PascalCase 的配置文件必须能正常读，不该产生回落说明。");
+            Assert.Null(reportCamel, "camelCase（本程序自己写出的格式）当然也要能读。");
+            Assert.Equal(CoreCfg.ThemeChoice.Dark, fromPascal.Theme, "PascalCase 的枚举值应解析成功。");
+            Assert.Equal(CoreCfg.ThemeChoice.Dark, fromCamel.Theme, "camelCase 的枚举值应解析成功。");
+            Assert.Equal("doctor", fromPascal.LastPage, "PascalCase 的普通字段应解析成功。");
+            Assert.Equal(fromPascal, fromCamel, "两种写法应得到完全相同的设置。");
+        });
     }
 }

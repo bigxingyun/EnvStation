@@ -1,4 +1,4 @@
-﻿using Microsoft.UI.Text;
+using Microsoft.UI.Text;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using Microsoft.UI.Xaml.Media;
@@ -446,6 +446,11 @@ internal static class UiKit
     }
 
     /// <summary>主按钮（Shape.S 圆角、LabelLarge 文案、桌面档 36px 高）。</summary>
+    /// <remarks>
+    /// <b>必须显式设 Background/Foreground</b>：不设的话 WinUI 用它的默认按钮样式，
+    /// 于是"主按钮"和"次要按钮"渲染成两个几乎一样的灰按钮，产品强调色一次都不出现
+    /// （实测证据见《重构与优化方案.md》4.1 节）。主操作与次要操作必须一眼可分。
+    /// </remarks>
     internal static Button PrimaryButton(string text, Action onClick, bool enabled = true)
     {
         var button = new Button
@@ -459,6 +464,11 @@ internal static class UiKit
             FontFamily = UiFont,
             FontSize = Type("LabelLarge").Size,
             FontWeight = FontWeights.Medium,
+
+            // 实底强调色 + 反色文字：这是"每页只有一个主操作"（规范 DP-1）在视觉上的落地。
+            Background = Brush("Primary"),
+            Foreground = Brush("OnPrimary"),
+            BorderThickness = new Thickness(0),
         };
 
         button.Click += (_, _) => onClick();
@@ -466,6 +476,11 @@ internal static class UiKit
     }
 
     /// <summary>次要按钮。</summary>
+    /// <remarks>
+    /// 刻意"描边 + 表层底色"而不是实底：次要操作在视觉上必须明显轻于主操作，
+    /// 否则一页里三四个同样重的按钮会让人不知道先点哪个。
+    /// 同时显式设 Foreground——不设会用系统默认前景，在深色主题下可能与表层色对比不足。
+    /// </remarks>
     internal static Button SecondaryButton(string text, Action onClick, bool enabled = true)
     {
         var button = new Button
@@ -478,7 +493,9 @@ internal static class UiKit
             Padding = new Thickness(Space4, Space1, Space4, Space1),
             FontFamily = UiFont,
             FontSize = Type("LabelLarge").Size,
+            FontWeight = FontWeights.Medium,
             Background = Brush("SurfaceContainerHighest"),
+            Foreground = OnSurface,
             BorderThickness = new Thickness(1),
             BorderBrush = Outline,
         };

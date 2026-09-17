@@ -136,6 +136,16 @@ internal static class BootProbe
         ExitTimer.Start();
     }
 
+    /// <summary>是否处于"测量模式"（自检或渲染探针被启用）。</summary>
+    /// <remarks>
+    /// 开发专用页面（性能自检页）只在测量模式下可构建。产品界面里没有它的入口，
+    /// 页面清单里也没有它——这样"给用户看的界面"与"给开发者用的测量装置"就不会混在一起，
+    /// 而测量仍然测的是真实视图栈（这是当初把测量页做进产品程序集的唯一理由）。
+    /// </remarks>
+    internal static bool MeasurementEnabled =>
+        System.Environment.GetEnvironmentVariable("ENVSTATION_BOOT_SELFCHECK") == "1"
+        || System.Environment.GetEnvironmentVariable("ENVSTATION_BOOT_RENDER") == "1";
+
     /// <summary>跑一遍页面切换、主题切换与滚动帧率计时（P01 的测量项）。</summary>
     private static async Task RunSelfCheckAsync(MainWindow main)
     {
@@ -144,7 +154,7 @@ internal static class BootProbe
             return;
         }
 
-        foreach (var tag in (string[])["overview", "doctor", "packages", "history", "actions", "settings", "perf"])
+        foreach (var tag in MainWindow.ProductPageTags)
         {
             var (clickMs, totalMs) = await main.MeasureNavigateAsync(tag).ConfigureAwait(true);
             Write($"页面切换 -> {tag}：点击响应 {clickMs:F1} ms，页面落地 {totalMs:F1} ms");
@@ -186,7 +196,7 @@ internal static class BootProbe
         // 连测三轮：第一轮含模板首次实例化的冷路径，后两轮才是常态。
         for (var pass = 0; pass < 3; pass++)
         {
-            foreach (var tag in (string[])["overview", "doctor", "packages", "history", "actions", "settings", "perf"])
+            foreach (var tag in MainWindow.ProductPageTags)
             {
                 await main.MeasureNavigateAsync(tag).ConfigureAwait(true);
                 Write(main.DescribeVisualTree(tag));
@@ -198,13 +208,13 @@ internal static class BootProbe
         Write(await main.MeasureResizeStormAsync().ConfigureAwait(true));
 
         // 逐页"导航 + 真实内容滚动"。
-        foreach (var tag in (string[])["overview", "doctor", "actions", "settings", "perf"])
+        foreach (var tag in (string[])["overview", "doctor", "actions", "settings"])
         {
             Write(await main.MeasureNavigationThenScrollAsync(tag).ConfigureAwait(true));
         }
 
         // 真实滚轮输入路径：用户的手走的就是这条。
-        foreach (var tag in (string[])["actions", "perf", "packages"])
+        foreach (var tag in (string[])["actions", "packages"])
         {
             Write(await main.MeasureMouseWheelScrollAsync(tag).ConfigureAwait(true));
         }

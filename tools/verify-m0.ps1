@@ -47,6 +47,7 @@ function Write-Step([string]$name, [string]$status, [string]$detail = '') {
         'OK'   { $color = 'Green' }
         'FAIL' { $color = 'Red' }
         'SKIP' { $color = 'DarkYellow' }
+        'WARN' { $color = 'DarkYellow' }
     }
     $null = $script:steps.Add([pscustomobject]@{ Step = $name; Status = $status; Detail = $detail })
     Write-Host ("  [{0,-4}] {1,-34} {2}" -f $status, $name, $detail) -ForegroundColor $color
@@ -101,7 +102,8 @@ $projects = @(
     'tests\EnvStation.Tests.VerifyActions\EnvStation.Tests.VerifyActions.csproj',
     'tests\EnvStation.Tests.Workflow\EnvStation.Tests.Workflow.csproj',
     'tests\EnvStation.Tests.NetArchive\EnvStation.Tests.NetArchive.csproj',
-    'tests\EnvStation.Tests.Config\EnvStation.Tests.Config.csproj'
+    'tests\EnvStation.Tests.Config\EnvStation.Tests.Config.csproj',
+    'tests\EnvStation.Tests.Ui\EnvStation.Tests.Ui.csproj'
 )
 
 $buildFailed = $false
@@ -115,7 +117,10 @@ foreach ($proj in $projects) {
         Write-Step "build $name" 'FAIL' 'see output below'
         $output | Select-Object -Last 40 | ForEach-Object { Write-Host "      $_" -ForegroundColor DarkRed }
     } else {
-        $warnCount = ($output | Select-String -Pattern 'warning' -SimpleMatch).Count
+        # 注意 @() 不能省：PowerShell 5.1 里"恰好一个匹配"时 Where-Object / Select-String
+        # 返回的是单个对象而不是集合，直接取 .Count 得到 $null，与 0 比较恒为假。
+        # 同一模式在汇总处曾让"有 FAIL 也报 All steps passed"（见文件末尾注释）。
+        $warnCount = @($output | Select-String -Pattern 'warning' -SimpleMatch).Count
         $detail = 'no warnings'
         if ($warnCount -gt 0) { $detail = "$warnCount warning(s)" }
         Write-Step "build $name" 'OK' $detail
@@ -141,6 +146,7 @@ $suites = @(
     @{ Id = 'WF';   Name = 'Workflow interpreter';       Proj = 'tests\EnvStation.Tests.Workflow' }
     @{ Id = 'NA';   Name = 'Download/archive actions';   Proj = 'tests\EnvStation.Tests.NetArchive' }
     @{ Id = 'CF';   Name = 'Config and mirrors';         Proj = 'tests\EnvStation.Tests.Config' }
+    @{ Id = 'UI';   Name = 'UI state & remedy model';    Proj = 'tests\EnvStation.Tests.Ui' }
     @{ Id = 'P02';  Name = 'M0-P02 registry read/write';   Proj = 'tests\EnvStation.Tests.RegistrySandbox' }
     @{ Id = 'P06';  Name = 'M0-P06 snapshot/rollback';     Proj = 'tests\EnvStation.Tests.Transactions' }
     @{ Id = 'P05';  Name = 'M0-P05 shadow switch';         Proj = 'tests\EnvStation.Tests.Installation' }
@@ -314,6 +320,130 @@ if (Test-Path $copyReview) {
     Write-Step 'C1 copy hard checks' 'SKIP' 'tools/review-copy.ps1 not found'
 }
 
+# ---- Step 8: 界面架构纪律（X-1 / X-4）----
+# 这两条对应《重构与优化方案.md》第 7 章的硬约束：
+#   X-1  界面不得直接调用内核动作：KernelBridge 只能被 Mvvm/KernelService.cs 引用。
+#        上一版的问题不是"没人写可写入口"，而是入口写好了却零调用、且没有任何地方能一眼看全。
+#   X-4  单文件不得超过 800 行：MainWindow.cs 曾长到 1935 行，其中约三分之一是性能测量装置。
+# 纪律不落成检查就只是愿望。
+Write-Head 'UI architecture discipline'
+
+$appDir = Join-Path $repoRoot 'src\EnvStation.App'
+$kernelServicePath = Join-Path $appDir 'Mvvm\KernelService.cs'
+
+if (Test-Path $appDir) {
+    # X-1：允许出现 KernelBridge 的文件白名单。
+    #   · KernelBridge.cs 是类自身的定义，必须允许；
+    #   · Mvvm/KernelService.cs 是唯一的包装处，界面一律经它访问内核。
+    # IKernelService.cs 只是接口声明，不引用实现，故不在名单内。
+    $bridgeAllowed = @(
+        (Join-Path $appDir 'KernelBridge.cs'),
+        (Join-Path $appDir 'Mvvm\KernelService.cs')
+    )
+
+    # MainWindow 是 partial 类，分散在多个文件里，且仍持有 _bridge。
+    # 这是 M1-4/M1-6 要拆掉的存量，先记为 WARN；拆完后把 $mainWindowStillHoldsBridge 改成 $false，
+    # 它立刻变成硬门禁。
+    #
+    # 用前缀匹配而不是逐个列文件名：partial 的文件名会随拆分过程变动
+    # （MainWindow.cs → MainWindow.Pages.cs / MainWindow.Probes.cs），
+    # 每次拆一个文件就要回来补白名单，这样的检查很快就会被人嫌麻烦而关掉。
+    # 认"这个类"而不是"这些文件"，才经得起后续重构。
+    $mainWindowStillHoldsBridge = $true
+    $pendingPrefix = Join-Path $appDir 'MainWindow'
+
+    $bridgeOffenders = @()
+    $bridgePending = @()
+    Get-ChildItem -Path $appDir -Recurse -Filter '*.cs' |
+        Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' } |
+        ForEach-Object {
+            if ($bridgeAllowed -contains $_.FullName) { return }
+
+            # 只认"真的在用"：类型名出现，或持有 _bridge 字段。
+            # 注释行不算——文档里提到 KernelBridge 是在解释架构，不是在绕过它；
+            # 把注释也算上会逼着人不写解释，那不是纪律想要的效果。
+            $hits = @()
+            $lineNo = 0
+            foreach ($line in (Get-Content -Path $_.FullName)) {
+                $lineNo++
+                $trimmed = $line.TrimStart()
+                if ($trimmed.StartsWith('//', [System.StringComparison]::Ordinal) -or
+                    $trimmed.StartsWith('*', [System.StringComparison]::Ordinal)) { continue }
+                if ($trimmed -match 'KernelBridge|_bridge\b') { $hits += "$($_.Name):$lineNo" }
+            }
+
+            if ($hits.Count -eq 0) { return }
+
+            if ($mainWindowStillHoldsBridge -and $_.FullName.StartsWith($pendingPrefix, [System.StringComparison]::OrdinalIgnoreCase)) {
+                $bridgePending += $hits
+            } else {
+                $bridgeOffenders += $hits
+            }
+        }
+
+    if ($bridgeOffenders.Count -gt 0) {
+        Write-Step 'X-1 kernel access is funneled' 'FAIL' ("KernelBridge 出现在白名单之外：" + ($bridgeOffenders -join '、'))
+        $testFailed = $true
+    } elseif ($bridgePending.Count -gt 0) {
+        # 只报数量与文件，不逐行罗列：存量有几十处时，一长串行号会把整张汇总表撑乱，
+        # 而这张表是给人扫一眼看的。要看具体位置就去看上面 FAIL 分支的格式。
+        $pendingFilesHit = @($bridgePending | ForEach-Object { ($_ -split ':')[0] } | Sort-Object -Unique)
+        Write-Step 'X-1 kernel access is funneled' 'WARN' `
+            ("MainWindow 待拆存量 $($bridgePending.Count) 处，分布在 " + ($pendingFilesHit -join '、') + "（M1-4/M1-6 处理）")
+    } else {
+        Write-Step 'X-1 kernel access is funneled' 'OK' 'KernelBridge referenced only by Mvvm/KernelService.cs'
+    }
+
+    # X-4：单文件行数上限。
+    $lineLimit = 800
+    $tooLong = @()
+    Get-ChildItem -Path $appDir -Recurse -Filter '*.cs' |
+        Where-Object { $_.FullName -notmatch '\\(obj|bin)\\' } |
+        ForEach-Object {
+            $count = (Get-Content -Path $_.FullName).Count
+            if ($count -gt $lineLimit) { $tooLong += "$($_.Name)=$count" }
+        }
+
+    if ($tooLong.Count -gt 0) {
+        # 说明：MainWindow.cs 当前的超限是已知存量，M1-4/M1-6 会把它拆开。
+        # 这里先只报告不拦截，等拆分完成后再把它改成硬门禁（见 M1 任务书 M1-6 验收）。
+        Write-Step 'X-4 file size limit' 'WARN' ("超过 $lineLimit 行（待 M1-6 拆分）：" + ($tooLong -join '、'))
+    } else {
+        Write-Step 'X-4 file size limit' 'OK' "no file exceeds $lineLimit lines"
+    }
+} else {
+    Write-Step 'X-1 kernel access is funneled' 'SKIP' 'src/EnvStation.App not found'
+}
+
+# ---- Step 9: 汇总逻辑的阳性对照 ----
+# 为什么需要这一步：本脚本原先的失败判据写成
+#     $failed = ($script:steps | Where-Object { $_.Status -eq 'FAIL' }).Count
+# 而 PowerShell 5.1 在「恰好一个结果」时返回的是单个对象、不是集合，取 .Count 得到 $null，
+# $null -gt 0 恒为假 —— 于是**任何一步 FAIL 都会被汇总成 All steps passed 并以 0 退出**。
+# 2026-09 给设计令牌加角色时，T2 明明报了 FAIL，脚本仍然绿着退出，就是这个缺陷。
+# 光修一行不够：判据本身必须有一份阳性对照，否则下次改回同样的写法没人会发现。
+Write-Head 'Self-check: summary failure detection'
+
+$probeName = '__selfcheck_probe__'
+$null = $script:steps.Add([pscustomobject]@{ Step = $probeName; Status = 'FAIL'; Detail = 'injected on purpose' })
+$probeCount = @($script:steps | Where-Object { $_.Status -eq 'FAIL' }).Count
+$script:steps.RemoveAt($script:steps.Count - 1)   # 立即移除，绝不影响最终汇总
+
+if ($probeCount -ge 1) {
+    Write-Step 'S1 failure detection works' 'OK' "injected FAIL counted as $probeCount"
+    $script:steps.Remove(($script:steps | Where-Object { $_.Step -eq $probeName }))
+} else {
+    Write-Step 'S1 failure detection works' 'FAIL' 'injected FAIL was NOT counted - the summary would report a false pass'
+    $testFailed = $true
+}
+
+if (@($script:steps | Where-Object { $_.Step -eq $probeName }).Count -gt 0) {
+    Write-Step 'S2 probe removed' 'FAIL' 'self-check probe leaked into the summary'
+    $testFailed = $true
+} else {
+    Write-Step 'S2 probe removed' 'OK' 'no leftover state'
+}
+
 # ---- Summary ----
 Write-Head 'Summary'
 
@@ -324,7 +454,7 @@ $script:steps | Format-Table -AutoSize | Out-String | Set-Content -Path $summary
 Write-Host "Summary written to: $summaryPath" -ForegroundColor Gray
 Write-Host "Detailed results in: $resultDir" -ForegroundColor Gray
 
-$failed = ($script:steps | Where-Object { $_.Status -eq 'FAIL' }).Count
+$failed = @($script:steps | Where-Object { $_.Status -eq 'FAIL' }).Count
 if ($failed -gt 0) {
     Write-Host ''
     Write-Host "$failed step(s) failed." -ForegroundColor Red

@@ -32,6 +32,18 @@ internal static class DesignTokens
     /// <summary>等宽字体族（tokens.json 的 fonts.mono 取首个族名）。</summary>
     internal const string MonoFontFamily = "Cascadia Mono";
 
+    /// <summary>垂直节奏（tokens.json 的 rhythm）。</summary>
+    /// <remarks>
+    /// <para>
+    /// 纪律：一个容器只能用其中一档，且<b>容器负责间距、元素不自带 Margin</b>。
+    /// 违反这条会让间距变成「Margin + Stack.Spacing」的偶然相加——
+    /// 上一版界面就是这么把 16px 的令牌渲染成 32.8px 的。
+    /// </para>
+    /// </remarks>
+    internal const double RhythmInGroup = 4;
+    internal const double RhythmBetweenGroups = 16;
+    internal const double RhythmBetweenSections = 32;
+
     /// <summary>深色主题的颜色令牌（role → #RRGGBB）。</summary>
     internal static readonly Dictionary<string, string> DarkColors = new(StringComparer.Ordinal)
     {
@@ -79,6 +91,15 @@ internal static class DesignTokens
         ["TechVersion"] = "#9CCDFF",
         ["TechCommand"] = "#FFC48A",
         ["TechHash"] = "#C6B4FF",
+        ["StateHover"] = "#1D2321",
+        ["StatePressed"] = "#2A3230",
+        ["StateSelected"] = "#123B36",
+        ["StateDisabled"] = "#5C605D",
+        ["StateFocusRing"] = "#6FF7EA",
+        ["StatusDotNeutral"] = "#A9ADAA",
+        ["StatusDotSuccess"] = "#4FDBD2",
+        ["StatusDotWarn"] = "#F0C24B",
+        ["StatusDotError"] = "#FFB4AB",
     };
 
     /// <summary>浅色主题的颜色令牌（role → #RRGGBB）。</summary>
@@ -128,6 +149,15 @@ internal static class DesignTokens
         ["TechVersion"] = "#0B4F9E",
         ["TechCommand"] = "#8A4A00",
         ["TechHash"] = "#5B3FA8",
+        ["StateHover"] = "#E8EAE7",
+        ["StatePressed"] = "#D8E6E3",
+        ["StateSelected"] = "#DCEDEA",
+        ["StateDisabled"] = "#8F9290",
+        ["StateFocusRing"] = "#006A60",
+        ["StatusDotNeutral"] = "#5C605D",
+        ["StatusDotSuccess"] = "#006A60",
+        ["StatusDotWarn"] = "#7A5900",
+        ["StatusDotError"] = "#BA1A1A",
     };
 
     /// <summary>高对比度主题的令牌映射（role → SystemColor* 资源键）。</summary>
@@ -178,6 +208,15 @@ internal static class DesignTokens
         ["TechVersion"] = "SystemColorWindowTextColor",
         ["TechCommand"] = "SystemColorWindowTextColor",
         ["TechHash"] = "SystemColorWindowTextColor",
+        ["StateHover"] = "SystemColorHighlightColor",
+        ["StatePressed"] = "SystemColorHighlightColor",
+        ["StateSelected"] = "SystemColorHighlightColor",
+        ["StateDisabled"] = "SystemColorGrayTextColor",
+        ["StateFocusRing"] = "SystemColorHighlightColor",
+        ["StatusDotNeutral"] = "SystemColorWindowTextColor",
+        ["StatusDotSuccess"] = "SystemColorWindowTextColor",
+        ["StatusDotWarn"] = "SystemColorWindowTextColor",
+        ["StatusDotError"] = "SystemColorWindowTextColor",
     };
 
     /// <summary>M3 15 级字阶（行高取桌面密度档）。</summary>
