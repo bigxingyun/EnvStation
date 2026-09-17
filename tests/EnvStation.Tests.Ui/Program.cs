@@ -40,6 +40,7 @@ internal static class Program
         ReportCases(h);
         TriageCases(h);
         PageTagCases(h);
+        SourceRouteCases(h);
         WiringCases(h);
 
         var code = h.Summarize();
@@ -778,6 +779,162 @@ internal static class Program
             {
                 Assert.True(entry.DisplayName.Length > 0, $"{entry.Kind} 缺少展示名。");
             }
+        });
+    }
+    // ══════════════════════════ 来源路线判定 ══════════════════════════
+
+    /// <summary>
+    /// <see cref="RuntimeSourceRouter"/> 的用例。
+    /// </summary>
+    /// <remarks>
+    /// 这一组盯的是"该走哪条路、为什么"。三种路线的成本差一个量级，而选择取决于用户机器上的条件；
+    /// 判定散在界面里就会出现"同一台机器从 CLI 走一条、从界面走另一条"。
+    /// </remarks>
+    private static void SourceRouteCases(TestHarness h)
+    {
+        h.Case("UI-90", "来源路线：本地归档优先，且不联网", () =>
+        {
+            var facts = new RuntimeEnvironmentFacts(
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["winget"] = @"C:\w\winget.exe" },
+                LocalArchiveExists: true,
+                NetworkAllowed: true);
+
+            var decision = RuntimeSourceRouter.Decide(
+            [
+                new(RuntimeSourceKind.LocalArchive, ArchivePath: @"D:\dl\python.zip"),
+                new(RuntimeSourceKind.PackageManager, PackageId: "Python.Python.3.12"),
+            ], facts);
+
+            Assert.Equal(RuntimeSourceKind.LocalArchive, decision.Kind,
+                "手里已经有归档就不该再下一次——声明顺序表达的就是这个偏好。");
+            Assert.False(decision.NeedsNetwork, "本地归档不需要联网。");
+            Assert.Contains("D:\\dl\\python.zip", decision.Reason, "理由里要给出具体路径。");
+        });
+
+        h.Case("UI-91", "★来源路线：本地归档不存在时落到下一条，而不是静默改走网络", () =>
+        {
+            var facts = new RuntimeEnvironmentFacts(
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["winget"] = @"C:\w\winget.exe" },
+                LocalArchiveExists: false,
+                NetworkAllowed: true);
+
+            var decision = RuntimeSourceRouter.Decide(
+            [
+                new(RuntimeSourceKind.LocalArchive, ArchivePath: @"D:\missing.zip"),
+                new(RuntimeSourceKind.PackageManager, PackageId: "Python.Python.3.12"),
+            ], facts);
+
+            Assert.Equal(RuntimeSourceKind.PackageManager, decision.Kind, "归档不在就落到包管理器。");
+            Assert.Contains("winget", decision.Reason, "理由要写明用的是哪个包管理器。");
+        });
+
+        h.Case("UI-92", "★来源路线：winget 缺失时判为阻断，并给出具体处置", () =>
+        {
+            var facts = new RuntimeEnvironmentFacts(
+                new Dictionary<string, string>(StringComparer.Ordinal),
+                LocalArchiveExists: false,
+                NetworkAllowed: true);
+
+            var decision = RuntimeSourceRouter.Decide(
+                [new(RuntimeSourceKind.PackageManager, PackageId: "Python.Python.3.12")],
+                facts);
+
+            Assert.True(decision.IsBlocked, "没有包管理器时这条路走不通，必须阻断而不是到执行时才失败。");
+            Assert.Contains("包管理器", decision.Blocker!, "阻断原因要指出缺的是包管理器。");
+            Assert.NotNull(decision.Remedy, "阻断必须给处置建议。");
+            Assert.Contains("应用安装程序", decision.Remedy!, "处置要具体到用户能照做。");
+        });
+
+        h.Case("UI-93", "来源路线：三个包管理器按 winget → scoop → choco 优先", () =>
+        {
+            var all = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["choco"] = @"C:\choco.exe",
+                ["scoop"] = @"C:\scoop.cmd",
+                ["winget"] = @"C:\winget.exe",
+            };
+
+            var facts = new RuntimeEnvironmentFacts(all, LocalArchiveExists: false, NetworkAllowed: true);
+            var decision = RuntimeSourceRouter.Decide(
+                [new(RuntimeSourceKind.PackageManager, PackageId: "x")], facts);
+
+            Assert.Equal("winget", decision.Manager, "三个都在时应选 winget。");
+
+            var noWinget = new RuntimeEnvironmentFacts(
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["choco"] = @"C:\choco.exe", ["scoop"] = @"C:\scoop.cmd" },
+                LocalArchiveExists: false,
+                NetworkAllowed: true);
+            Assert.Equal("scoop",
+                RuntimeSourceRouter.Decide([new(RuntimeSourceKind.PackageManager, PackageId: "x")], noWinget).Manager,
+                "没有 winget 时应选 scoop（而且不该因为没 winget 就整条路不可用）。");
+        });
+
+        h.Case("UI-94", "来源路线：不允许联网时，需要联网的路线一律判不可用", () =>
+        {
+            var facts = new RuntimeEnvironmentFacts(
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["winget"] = @"C:\winget.exe" },
+                LocalArchiveExists: false,
+                NetworkAllowed: false);
+
+            var decision = RuntimeSourceRouter.Decide(
+                [new(RuntimeSourceKind.PackageManager, PackageId: "x")], facts);
+
+            Assert.True(decision.IsBlocked, "预演或未授权联网时不该判定成可安装。");
+            Assert.Contains("联网", decision.Blocker!, "阻断原因要点明是联网限制。");
+        });
+
+        h.Case("UI-95", "来源路线：官方归档需要地址，缺地址则不算可用", () =>
+        {
+            var facts = new RuntimeEnvironmentFacts(
+                new Dictionary<string, string>(StringComparer.Ordinal),
+                LocalArchiveExists: false,
+                NetworkAllowed: true);
+
+            Assert.True(
+                RuntimeSourceRouter.Decide([new(RuntimeSourceKind.OfficialArchive)], facts).IsBlocked,
+                "声明了官方归档却没给地址，不该被当成可用来源。");
+
+            var withUrl = RuntimeSourceRouter.Decide(
+                [new(RuntimeSourceKind.OfficialArchive, ArchiveUrl: "https://example.invalid/py.zip", Sha256: "sha256:ab")],
+                facts);
+            Assert.Equal(RuntimeSourceKind.OfficialArchive, withUrl.Kind, "给了地址就能走。");
+            Assert.Contains("https://example.invalid/py.zip", withUrl.Reason, "理由里要给出地址。");
+        });
+
+        h.Case("UI-96", "来源路线：没有任何候选时给出可照做的阻断", () =>
+        {
+            var decision = RuntimeSourceRouter.Decide(
+                [],
+                new RuntimeEnvironmentFacts(new Dictionary<string, string>(StringComparer.Ordinal), false, true));
+
+            Assert.True(decision.IsBlocked, "没有来源必须阻断。");
+            Assert.Contains("没有声明", decision.Blocker!, "要指出是「没声明」而不是「不可用」。");
+        });
+
+        h.Case("UI-97", "★来源路线：完整性由谁校验必须如实说清", () =>
+        {
+            // 走包管理器时哈希是包管理器校验的，不是环境站校验的。
+            // 把别人的保障说成自己的，是这个产品最不该犯的错。
+            var facts = new RuntimeEnvironmentFacts(
+                new Dictionary<string, string>(StringComparer.Ordinal) { ["winget"] = @"C:\winget.exe" },
+                LocalArchiveExists: false,
+                NetworkAllowed: true);
+
+            var pm = RuntimeSourceRouter.Decide([new(RuntimeSourceKind.PackageManager, PackageId: "x")], facts);
+            Assert.Contains("包管理器自行校验", pm.IntegrityGuarantor, "不能把包管理器做的校验算在环境站头上。");
+
+            var local = RuntimeSourceRouter.Decide(
+                [new(RuntimeSourceKind.LocalArchive, ArchivePath: @"D:\a.zip")],
+                facts with { LocalArchiveExists = true });
+            Assert.Contains("环境站校验", local.IntegrityGuarantor, "本地归档的哈希由环境站校验。");
+        });
+
+        h.Case("UI-98", "来源路线：风险级按路线区分（包管理器高于归档）", () =>
+        {
+            Assert.Equal(RiskLevel.Reversible, RuntimeSourceRisk.Of(RuntimeSourceKind.LocalArchive),
+                "本地归档可逆。");
+            Assert.Equal(RiskLevel.High, RuntimeSourceRisk.Of(RuntimeSourceKind.PackageManager),
+                "包管理器把「装到哪、装什么」的决定权交给外部工具，风险更高。");
         });
     }
     // ══════════════════════════ 接线与映射完整性 ══════════════════════════

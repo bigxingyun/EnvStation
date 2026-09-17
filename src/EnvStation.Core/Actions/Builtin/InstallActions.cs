@@ -31,7 +31,13 @@ internal abstract class InstallActionBase : EnvActionBase
     protected static ImmutableArray<string> Managers { get; } = ["winget", "scoop", "choco"];
 
     /// <summary>解析包管理器可执行文件路径。</summary>
-    protected static string? ResolveManagerExecutable(string manager)
+    /// <remarks>
+    /// <b>可见性为 <c>internal</c> 而不是 <c>protected</c></b>：编排层要用同一个解析结果去判定
+    /// 「这条路走不走得通」，而它不继承本类。若让它自己再实现一套查找逻辑，判定与执行就会各有一套
+    /// 路径规则——出现「检查说 winget 可用、执行时却说找不到」这种最难排查的不一致
+    /// （本项目已有同类教训：D-44 的两处判据各写一遍）。
+    /// </remarks>
+    internal static string? ResolveManagerExecutable(string manager)
     {
         var candidates = manager.ToLowerInvariant() switch
         {
