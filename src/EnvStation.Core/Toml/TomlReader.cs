@@ -981,8 +981,7 @@ public static class TomlReader
                     continue;
                 }
 
-                sb.Append(c);
-                Advance();
+                AppendNormalizedNewline(sb, c);
             }
 
             return sb.ToString();
@@ -993,7 +992,7 @@ public static class TomlReader
             var startLine = _line;
             Advance(3);
             SkipImmediateNewline();
-            var start = _pos;
+            var sb = new StringBuilder();
             while (true)
             {
                 if (AtEnd)
@@ -1003,13 +1002,43 @@ public static class TomlReader
 
                 if (LookingAt("'''"))
                 {
-                    var value = _text[start.._pos];
                     Advance(3);
-                    return value;
+                    return sb.ToString();
                 }
 
-                Advance();
+                // 字面量字符串同样要规范化换行。不能直接取原文切片：
+                // CRLF 源文件里的切片会带回车，解析结果跟着带，多行字符串的换行就成了两个字符。
+                AppendNormalizedNewline(sb, Peek());
             }
+        }
+
+        /// <summary>
+        /// 追加一个字符，把换行统一成 <c>\n</c>。
+        /// </summary>
+        /// <remarks>
+        /// TOML 规范要求多行字符串里的换行以 <c>\n</c> 表示，
+        /// 因此 CRLF 与单独的 CR 都要归一。这不是为了好看：
+        /// 不归一的话，同一份 TOML 在 LF 与 CRLF 的工作区里会解析出不同的值，
+        /// 而这种差异在 Windows 上按检出设置随机出现——本仓库真的因此挂过一个用例
+        /// （SC-05，源文件被检出成 CRLF，测试题面里的换行跟着变成 CRLF）。
+        /// </remarks>
+        private void AppendNormalizedNewline(StringBuilder sb, char c)
+        {
+            if (c == '\r')
+            {
+                Advance();
+
+                if (!AtEnd && Peek() == '\n')
+                {
+                    Advance();
+                }
+
+                sb.Append('\n');
+                return;
+            }
+
+            sb.Append(c);
+            Advance();
         }
 
         private string ParseEscape(int startLine)

@@ -162,6 +162,23 @@ internal static class Program
             Assert.Equal("中文", r.Value.GetString("unicode"), "Unicode 转义");
         });
 
+        // 上面那条用例的题面是 C# 原始字符串字面量，题面里的换行取决于源文件的行尾。
+        // 这里显式喂 CRLF 与单独的 CR，把"换行必须归一为 \n"这条规范钉死——
+        // 否则同一份测试在不同检出设置下结果不同（本题就是因此在 CRLF 工作区挂过）。
+        h.Case("SC-05b", "TOML 多行字符串：CRLF 与 CR 的换行必须归一为 \\n", () =>
+        {
+            const string crlf = "multi = \"\"\"\r\nline1\r\nline2\"\"\"\r\nliteral = '''\r\nraw1\r\nraw2'''\r\n";
+            const string cr = "multi = \"\"\"\rline1\rline2\"\"\"\rliteral = '''\rraw1\rraw2'''\r";
+
+            foreach (var (text, label) in new[] { (crlf, "CRLF"), (cr, "CR") })
+            {
+                var r = CoreToml.TomlReader.Parse(text);
+                Assert.True(r.IsSuccess, $"{label}：应解析成功，实际 {r.Error}");
+                Assert.Equal("line1\nline2", r.Value.GetString("multi"), $"{label}：多行基本字符串换行归一");
+                Assert.Equal("raw1\nraw2", r.Value.GetString("literal"), $"{label}：多行字面量字符串换行归一");
+            }
+        });
+
         h.Case("SC-06", "TOML 数值家族", () =>
         {
             const string text = """
