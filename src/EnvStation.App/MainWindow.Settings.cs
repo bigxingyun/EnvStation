@@ -1,5 +1,6 @@
 ﻿using EnvStation.App.Controls;
 using EnvStation.Core.Configuration;
+using EnvStation.Core.Diagnostics;
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 
@@ -36,6 +37,7 @@ internal sealed partial class MainWindow
 
         form.Children.Add(BuildAppearanceCard());
         form.Children.Add(BuildSafetyCard());
+        form.Children.Add(BuildAdvancedCard());
         form.Children.Add(BuildAboutCard());
 
         return UiKit.Scroll(form);
@@ -114,6 +116,27 @@ internal sealed partial class MainWindow
         return card;
     }
 
+    /// <summary>
+    /// 高级：给包作者与审计者看的东西。
+    /// </summary>
+    /// <remarks>
+    /// 「动作库」从一级导航移到这里（决策 D4）。74 个动作的清单有价值，但价值对象是
+    /// <b>写包的人</b>——他要核对"我这份包能调用哪些动作、需要哪些能力"。
+    /// 对只想把环境配好的用户，它是一屏看不懂的 ID。
+    /// </remarks>
+    private UIElement BuildAdvancedCard()
+    {
+        var (card, body) = UiKit.CardWithBody(DesignTokens.RhythmInGroup);
+
+        body.Children.Add(UiKit.SectionLabel("高级"));
+        body.Children.Add(UiKit.Body(
+            "以下内容面向自动化包作者与审计者。", secondary: true));
+
+        body.Children.Add(UiKit.ButtonBar(
+            UiKit.SecondaryButton($"能力与动作（{_kernel.ActionCount} 个）", () => Navigate(PageTags.Actions))));
+
+        return card;
+    }
     private UIElement BuildAboutCard()
     {
         var (card, body) = UiKit.CardWithBody(DesignTokens.RhythmInGroup);

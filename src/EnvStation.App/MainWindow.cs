@@ -1,4 +1,4 @@
-﻿using System.Globalization;
+using System.Globalization;
 
 using EnvStation.Abstractions;
 using EnvStation.App.Mvvm;
@@ -322,7 +322,6 @@ internal sealed partial class MainWindow : Window
 
         navigation.MenuItems.Add(new NavigationViewItemSeparator());
         navigation.MenuItems.Add(GroupHeader("工具"));
-        navigation.MenuItems.Add(Item("动作库", "\uE8F1", PageTags.Actions));
         navigation.MenuItems.Add(Item("设置", "\uE713", PageTags.Settings));
 
         // 先选中、再挂事件：顺序反了会在启动时多走一遍 Navigate，

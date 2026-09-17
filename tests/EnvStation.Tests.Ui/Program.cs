@@ -733,7 +733,7 @@ internal static class Program
                 Assert.True(PageTags.IsKnown(tag), $"{tag} 是产品页面，必须认得。");
             }
 
-            Assert.Equal(8, PageTags.Product.Count, "当前是八个产品页面（新页面落地时要同步这份清单）。");
+            Assert.Equal(7, PageTags.Product.Count, "当前是七个产品页面（新页面落地时要同步这份清单）。");
         });
 
         h.Case("UI-82", "页面标签：无效标签回落到首页", () =>

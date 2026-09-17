@@ -40,6 +40,11 @@ public static class PageTags
     public const string History = "history";
 
     /// <summary>动作库。</summary>
+    /// <remarks>
+    /// <b>它不是一级页面</b>（决策 D4）：74 个动作的清单有价值，但价值对象是<b>包作者与审计者</b>，
+    /// 不是配置环境的用户。放在一级导航里会让用户以为"这个软件是给写脚本的人用的"。
+    /// 入口移到「设置」，不进产品导航。
+    /// </remarks>
     public const string Actions = "actions";
 
     /// <summary>设置。</summary>
@@ -56,7 +61,16 @@ public static class PageTags
     /// 性能自检页刻意不在其中：它带着上千条编造数据，不该出现在用户能走到的地方。
     /// </remarks>
     public static IReadOnlyList<string> Product { get; } =
-        [Overview, Doctor, Runtime, Env, Packages, History, Actions, Settings];
+        [Overview, Doctor, Runtime, Env, Packages, History, Settings];
+
+    /// <summary>
+    /// 可供"下次启动落点"使用的标签（产品页面）。
+    /// </summary>
+    /// <remarks>
+    /// 当前与 <see cref="Product"/> 相同。分开声明是为了让"动作库不进导航但仍是可达页面"
+    /// 这件事在类型上说得清：它不在 <see cref="Product"/> 里，因此不该成为启动落点。
+    /// </remarks>
+    public static IReadOnlyList<string> Navigable => Product;
 
     /// <summary>某个标签是不是已知的产品页面。</summary>
     /// <remarks>
