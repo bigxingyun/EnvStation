@@ -1,4 +1,5 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package
     Name="EnvStation CLI"
     Manufacturer="EnvStation"
@@ -13,16 +14,36 @@
 
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/bigxingyun/EnvStation" />
     <Property Id="ARPHELPLINK" Value="https://github.com/bigxingyun/EnvStation/issues" />
-    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" Sequence="both" />
+
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
 
     <Feature Id="Main" Title="EnvStation CLI" Level="1">
       <ComponentGroupRef Id="CliFiles" />
       <ComponentRef Id="CliPath" />
+      <ComponentRef Id="CliShortcuts" />
     </Feature>
 
     <StandardDirectory Id="ProgramFiles64Folder">
       <Directory Id="CompanyFolder" Name="EnvStation">
         <Directory Id="INSTALLFOLDER" Name="cli" />
+      </Directory>
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="CliShortcutFolder" Name="EnvStation CLI">
+        <Component Id="CliShortcuts" Guid="*">
+          <Shortcut
+            Id="UninstallCliShortcut"
+            Name="Uninstall EnvStation CLI"
+            Description="Remove EnvStation CLI"
+            Target="[System64Folder]msiexec.exe"
+            Arguments="/x [ProductCode]" />
+          <RemoveFolder Id="CliShortcutFolder" On="uninstall" />
+          <RegistryValue Root="HKLM" Key="Software\EnvStation\Cli" Name="shortcut" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
       </Directory>
     </StandardDirectory>
 
@@ -40,7 +61,7 @@
           Part="last"
           Action="set"
           System="yes" />
-        <RegistryValue Root="HKMU" Key="Software\EnvStation\Cli" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+        <RegistryValue Root="HKLM" Key="Software\EnvStation\Cli" Name="installed" Type="integer" Value="1" KeyPath="yes" />
       </Component>
     </DirectoryRef>
   </Package>

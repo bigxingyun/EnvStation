@@ -1,4 +1,5 @@
-<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs"
+     xmlns:ui="http://wixtoolset.org/schemas/v4/wxs/ui">
   <Package
     Name="EnvStation"
     Manufacturer="EnvStation"
@@ -13,14 +14,18 @@
 
     <Property Id="ARPURLINFOABOUT" Value="https://github.com/bigxingyun/EnvStation" />
     <Property Id="ARPHELPLINK" Value="https://github.com/bigxingyun/EnvStation/issues" />
-    <Property Id="ARPNOMODIFY" Value="1" />
+    <Property Id="ARPNOREPAIR" Value="1" />
+    <SetProperty Id="ARPINSTALLLOCATION" Value="[INSTALLFOLDER]" After="CostFinalize" Sequence="both" />
 
     <Icon Id="AppIcon" SourceFile="!(bindpath.app)\EnvStation.exe" />
     <Property Id="ARPPRODUCTICON" Value="AppIcon" />
 
+    <ui:WixUI Id="WixUI_Minimal" />
+    <WixVariable Id="WixUILicenseRtf" Value="License.rtf" />
+
     <Feature Id="Main" Title="EnvStation" Level="1">
       <ComponentGroupRef Id="AppFiles" />
-      <ComponentRef Id="StartMenuShortcut" />
+      <ComponentRef Id="StartMenuShortcuts" />
     </Feature>
 
     <StandardDirectory Id="ProgramFiles64Folder">
@@ -29,13 +34,20 @@
 
     <StandardDirectory Id="ProgramMenuFolder">
       <Directory Id="AppShortcutFolder" Name="EnvStation">
-        <Component Id="StartMenuShortcut" Guid="*">
+        <Component Id="StartMenuShortcuts" Guid="*">
           <Shortcut
             Id="AppShortcut"
             Name="EnvStation"
             Description="EnvStation"
             Target="[INSTALLFOLDER]EnvStation.exe"
-            WorkingDirectory="INSTALLFOLDER" />
+            WorkingDirectory="INSTALLFOLDER"
+            Icon="AppIcon" />
+          <Shortcut
+            Id="UninstallShortcut"
+            Name="Uninstall EnvStation"
+            Description="Remove EnvStation"
+            Target="[System64Folder]msiexec.exe"
+            Arguments="/x [ProductCode]" />
           <RemoveFolder Id="AppShortcutFolder" On="uninstall" />
           <RegistryValue Root="HKLM" Key="Software\EnvStation" Name="installed" Type="integer" Value="1" KeyPath="yes" />
         </Component>

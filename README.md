@@ -8,7 +8,7 @@ Windows 上装运行时、改环境变量、整理 PATH、处理同名命令冲�
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/8.0)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%201809%2B%20%7C%2011%20(x64%2FARM64)-0078D6?logo=windows)](https://www.microsoft.com/windows)
 
-> 当前版本 **v0.0.1**。没有 MSI/MSIX，也没有代码签名；[Releases](https://github.com/bigxingyun/EnvStation/releases/tag/v0.0.1) 里是可直接跑的 zip。能改本机环境，建议先在虚拟机或闲置机器上试用。
+> 当前版本 **v0.0.1**。没有代码签名；[Releases](https://github.com/bigxingyun/EnvStation/releases/tag/v0.0.1) 提供 zip 和 MSI。能改本机环境，建议先在虚拟机或闲置机器上试用。
 
 ## 目录
 
@@ -50,14 +50,16 @@ Windows 上装运行时、改环境变量、整理 PATH、处理同名命令冲�
 
 ## 下载
 
-从 [v0.0.1](https://github.com/bigxingyun/EnvStation/releases/tag/v0.0.1) 拿 zip，解压就能跑，不用先装 .NET。
+从 [v0.0.1](https://github.com/bigxingyun/EnvStation/releases/tag/v0.0.1) 下载，不用先装 .NET。
 
 | 文件 | 内容 |
 | --- | --- |
+| `EnvStation-0.0.1-win-x64.msi` | 图形界面安装包，装到 Program Files，开始菜单可卸载 |
+| `envstation-cli-0.0.1-win-x64.msi` | 命令行安装包，写入系统 PATH，开始菜单可卸载 |
 | `EnvStation-0.0.1-win-x64.zip` | 图形界面，解压后打开 `EnvStation.exe` |
 | `envstation-cli-0.0.1-win-x64.zip` | 命令行，解压后运行 `envstation.exe` |
 
-Windows 可能提示未签名，选「仍要运行」即可。ARM64 本机请从源码构建。
+MSI 需要管理员权限。Windows 可能提示未签名，选「仍要运行」即可。ARM64 本机请从源码构建。
 
 ## 环境要求
 
@@ -308,7 +310,8 @@ tools/                         验证与测量脚本
 
 ## 已知限制
 
-- 没有 MSI/MSIX，没有代码签名；[Releases](https://github.com/bigxingyun/EnvStation/releases) 提供 zip  
+- 没有代码签名；MSI 需要管理员权限才能安装/卸载  
+- [Releases](https://github.com/bigxingyun/EnvStation/releases) 同时提供 zip 与 MSI  
 - 不能写系统级环境变量（无提权子进程）  
 - 安装依赖本机包管理器和网络  
 - 部分静态规则依赖外部数据，尚未全部落地  

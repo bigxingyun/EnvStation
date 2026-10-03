@@ -10,5 +10,6 @@
   </PropertyGroup>
   <ItemGroup>
     <BindPath Include="$(AppPublishDir)" BindName="app" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
   </ItemGroup>
 </Project>

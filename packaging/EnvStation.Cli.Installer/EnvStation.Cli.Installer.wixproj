@@ -5,10 +5,11 @@
     <OutputName>envstation-cli-$(Version)-win-x64</OutputName>
     <Version Condition="'$(Version)' == ''">0.0.1</Version>
     <DefineConstants>Version=$(Version)</DefineConstants>
-    <SuppressIces>ICE61</SuppressIces>
+    <SuppressIces>ICE38;ICE43;ICE57;ICE61</SuppressIces>
     <CliPublishDir Condition="'$(CliPublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\v$(Version)\cli-win-x64</CliPublishDir>
   </PropertyGroup>
   <ItemGroup>
     <BindPath Include="$(CliPublishDir)" BindName="cli" />
+    <PackageReference Include="WixToolset.UI.wixext" Version="5.0.2" />
   </ItemGroup>
 </Project>
