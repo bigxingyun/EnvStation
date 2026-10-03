@@ -179,7 +179,7 @@ internal sealed partial class MainWindow
         var (card, body) = UiKit.CardWithBody(DesignTokens.RhythmInGroup);
 
         body.Children.Add(UiKit.SectionLabel("关于"));
-        body.Children.Add(UiKit.Row("版本", UiKit.Mono("0.1.0")));
+        body.Children.Add(UiKit.Row("版本", UiKit.Mono("0.0.1")));
         body.Children.Add(UiKit.Row("动作库", UiKit.Body($"{_kernel.ActionCount} 个动作")));
 
         var dataDir = UiKit.Stack(DesignTokens.RhythmInGroup);

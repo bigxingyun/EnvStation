@@ -3,16 +3,17 @@
 Windows 上装运行时、改环境变量、整理 PATH、处理同名命令冲突。默认只预演，确认后才写入；写之前建快照，失败可回滚。
 
 [![Build](https://img.shields.io/badge/build-passing-brightgreen?logo=github)](https://github.com/bigxingyun/EnvStation/actions)
-[![Version](https://img.shields.io/badge/release-v0.1.0--dev-orange)](https://github.com/bigxingyun/EnvStation/releases)
+[![Version](https://img.shields.io/badge/release-v0.0.1-blue)](https://github.com/bigxingyun/EnvStation/releases/tag/v0.0.1)
 [![License](https://img.shields.io/badge/license-AGPL--3.0-blue)](LICENSE)
 [![.NET](https://img.shields.io/badge/.NET-8.0-512BD4?logo=dotnet)](https://dotnet.microsoft.com/download/dotnet/8.0)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%201809%2B%20%7C%2011%20(x64%2FARM64)-0078D6?logo=windows)](https://www.microsoft.com/windows)
 
-> 开发中快照：没有正式安装包，也没有代码签名。能改本机环境，建议先在虚拟机或闲置机器上试用。
+> 当前版本 **v0.0.1**。没有 MSI/MSIX，也没有代码签名；[Releases](https://github.com/bigxingyun/EnvStation/releases/tag/v0.0.1) 里是可直接跑的 zip。能改本机环境，建议先在虚拟机或闲置机器上试用。
 
 ## 目录
 
 - [能做什么](#能做什么)
+- [下载](#下载)
 - [环境要求](#环境要求)
 - [从源码构建](#从源码构建)
 - [快速上手](#快速上手)
@@ -46,6 +47,17 @@ Windows 上装运行时、改环境变量、整理 PATH、处理同名命令冲�
 | --- | --- |
 | ![环境检测 · 浅色](docs/screenshots/doctor-light.png) | ![动作库 · 浅色](docs/screenshots/actions-light.png) |
 | ![环境检测 · 深色](docs/screenshots/doctor-dark.png) | ![导入包 · 深色](docs/screenshots/packages-dark.png) |
+
+## 下载
+
+从 [v0.0.1](https://github.com/bigxingyun/EnvStation/releases/tag/v0.0.1) 拿 zip，解压就能跑，不用先装 .NET。
+
+| 文件 | 内容 |
+| --- | --- |
+| `EnvStation-0.0.1-win-x64.zip` | 图形界面，解压后打开 `EnvStation.exe` |
+| `envstation-cli-0.0.1-win-x64.zip` | 命令行，解压后运行 `envstation.exe` |
+
+Windows 可能提示未签名，选「仍要运行」即可。ARM64 本机请从源码构建。
 
 ## 环境要求
 
@@ -296,7 +308,7 @@ tools/                         验证与测量脚本
 
 ## 已知限制
 
-- 只能从源码构建，无 MSI/MSIX，无代码签名  
+- 没有 MSI/MSIX，没有代码签名；[Releases](https://github.com/bigxingyun/EnvStation/releases) 提供 zip  
 - 不能写系统级环境变量（无提权子进程）  
 - 安装依赖本机包管理器和网络  
 - 部分静态规则依赖外部数据，尚未全部落地  
