@@ -37,7 +37,7 @@ internal sealed partial class MainWindow
         var page = UiKit.Stack(DesignTokens.RhythmBetweenGroups);
 
         page.Children.Add(UiKit.Title("环境就绪"));
-        page.Children.Add(UiKit.Body("检测本机是否具备开始开发的条件。只读检测，不修改系统。", secondary: true));
+        page.Children.Add(UiKit.Body("看看这台机器缺什么，能修的当场修。", secondary: true));
 
         // ── 结论卡：一眼看到"能不能开工" ──
         var (verdictCard, verdictBody) = UiKit.CardWithBody(DesignTokens.RhythmBetweenGroups);
@@ -140,7 +140,7 @@ internal sealed partial class MainWindow
 
         if (report is null)
         {
-            host.Children.Add(AppControls.EmptyState("尚未检测。", "开始检测", ReloadReadiness));
+            host.Children.Add(AppControls.EmptyState("还没检测。", "开始检测", ReloadReadiness));
             return;
         }
 
@@ -161,15 +161,14 @@ internal sealed partial class MainWindow
         else if (report.IsHealthy)
         {
             host.Children.Add(AppControls.EmptyState(
-                "环境已就绪，没有需要处理的问题。",
+                "没什么要处理的，可以开工。",
                 "重新检测",
                 ReloadReadiness));
         }
         else
         {
-            // 没有待办项但有检测未完成：既不能说"就绪"，也不该说"有问题"。
             host.Children.Add(AppControls.EmptyState(
-                "有检测项未能完成，暂时无法判断环境是否就绪。",
+                "有几项检测没跑完，暂时不好下结论。",
                 "重试",
                 ReloadReadiness));
         }
@@ -207,8 +206,8 @@ internal sealed partial class MainWindow
             content.Children.Add(DescribePair("怎么办", item.Plan.Summary));
 
             var fix = UiKit.PrimaryButton(
-                item.NeedsSecondConfirmation ? "查看变更" : "修复",
-                () => ShowFixPending(item));
+                "修复",
+                () => RunRemedyFixAsync(item, "overview", ReloadReadiness));
 
             if (!item.ShouldOfferFix)
             {
@@ -220,7 +219,7 @@ internal sealed partial class MainWindow
         else
         {
             // 只提示不可修的条目：不给出假的修复按钮（规范里"禁止假按钮"）。
-            content.Children.Add(DescribePair("怎么办", "此项需要手工处理，环境站不代改。"));
+            content.Children.Add(DescribePair("怎么办", "这条得自己处理，程序不代改。"));
         }
 
         return UiKit.Card(content);
@@ -240,16 +239,6 @@ internal sealed partial class MainWindow
 
         return panel;
     }
-
-    /// <summary>
-    /// 修复入口的临时处理。
-    /// </summary>
-    /// <remarks>
-    /// 执行链路（差量预览 → 快照 → 执行 → 复检）在 M2-10/M2-11 交付，本阶段刻意不给假按钮：
-    /// 用户点下去会看到一句"尚未接通"的实话，而不是一个看起来能修、点完什么也没发生的按钮。
-    /// </remarks>
-    private void ShowFixPending(RemedyItem item) =>
-        SetStatus($"修复链路尚未接通：{item.Title}", "overview");
 
     /// <summary>本机信息卡（次要内容）。</summary>
     private static UIElement BuildHostInfoCard(DiagnosticReport report)

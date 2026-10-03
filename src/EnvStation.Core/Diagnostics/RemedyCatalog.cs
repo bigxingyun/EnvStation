@@ -300,18 +300,93 @@ public static class RemedyCatalog
         var builders = ImmutableArray.CreateBuilder<RemedyItem>();
         for (var i = 0; i < conflicts.Length; i++)
         {
-            builders.Add(RemedyItem.Notice(
+            var line = conflicts[i];
+            var preferred = TryPickUserPathForConflict(line);
+            if (preferred is null)
+            {
+                builders.Add(RemedyItem.Notice(
+                    $"conflict.{i}",
+                    RemedySeverity.Warning,
+                    "存在同名命令冲突",
+                    line,
+                    "多个软件的安装目录提供同名命令，谁先生效由 PATH 顺序决定。",
+                    "你可能以为在用其中一个工具，实际调用的是另一个，表现为「某个命令行为诡异」。",
+                    "envstation.detect.conflict",
+                    RiskLevel.High));
+                continue;
+            }
+
+            builders.Add(new RemedyItem(
                 $"conflict.{i}",
                 RemedySeverity.Warning,
                 "存在同名命令冲突",
-                conflicts[i],
+                line,
                 "多个软件的安装目录提供同名命令，谁先生效由 PATH 顺序决定。",
                 "你可能以为在用其中一个工具，实际调用的是另一个，表现为「某个命令行为诡异」。",
-                "envstation.detect.conflict",
-                RiskLevel.High));
+                RemediationPlan.Single(
+                    RemedyStep.Of(
+                        "envstation.path.prioritize",
+                        $"把用户目录 {preferred} 调到 PATH 最前",
+                        RemedyArgument.Of("scope", "user"),
+                        RemedyArgument.Of("entry", preferred),
+                        RemedyArgument.Of("index", 0L)),
+                    $"优先使用 {preferred} 中的命令"),
+                RiskLevel.Reversible,
+                "envstation.detect.conflict"));
         }
 
         return builders.ToImmutable();
+    }
+
+    /// <summary>
+    /// 从冲突说明里挑一个用户目录下的路径，作为 prioritize 的目标。
+    /// </summary>
+    private static string? TryPickUserPathForConflict(string line)
+    {
+        var userRoot = System.Environment.GetFolderPath(System.Environment.SpecialFolder.UserProfile);
+        var local = System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData);
+        var paths = new List<string>();
+
+        // 不能按 ':' 切开：Windows 路径本身含盘符冒号。按箭头与中文分隔符切段后，再提取路径形态。
+        foreach (var segment in line.Split([" → ", "→", " —— ", "——", "；", ";"], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+        {
+            foreach (var token in segment.Split([' ', '，', ',', '（', '(', '）', ')'], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries))
+            {
+                var cleaned = token.TrimEnd('。', '；', ';', '、');
+                if (cleaned.Length < 3)
+                {
+                    continue;
+                }
+
+                if (cleaned.Contains(":\\", StringComparison.Ordinal)
+                    || cleaned.Contains(":/", StringComparison.Ordinal)
+                    || cleaned.StartsWith('%'))
+                {
+                    paths.Add(cleaned);
+                }
+            }
+        }
+
+        foreach (var candidate in paths)
+        {
+            var expanded = System.Environment.ExpandEnvironmentVariables(candidate);
+            if (expanded.StartsWith(userRoot, StringComparison.OrdinalIgnoreCase)
+                || expanded.StartsWith(local, StringComparison.OrdinalIgnoreCase)
+                || candidate.Contains("%USERPROFILE%", StringComparison.OrdinalIgnoreCase)
+                || candidate.Contains("%LOCALAPPDATA%", StringComparison.OrdinalIgnoreCase)
+                || candidate.Contains("%APPDATA%", StringComparison.OrdinalIgnoreCase))
+            {
+                // prioritize 需要的是目录，不是 exe 全路径。
+                if (Path.HasExtension(expanded))
+                {
+                    return Path.GetDirectoryName(candidate) ?? Path.GetDirectoryName(expanded);
+                }
+
+                return candidate;
+            }
+        }
+
+        return null;
     }
 
     /// <summary>
@@ -548,7 +623,8 @@ public static class RemedyCatalog
         return marker;
     }
 
-    private static ImmutableArray<RemedyItem> FromRuntime(IReadOnlyDictionary<string, string> outputs)    {
+    private static ImmutableArray<RemedyItem> FromRuntime(IReadOnlyDictionary<string, string> outputs)
+    {
         if (IsTrue(outputs, "found"))
         {
             return [];
@@ -556,6 +632,30 @@ public static class RemedyCatalog
 
         var kind = Get(outputs, "kind");
         var display = kind.Length > 0 ? kind : "目标运行时";
+
+        if (WingetPackageIds.TryGetValue(kind, out var packageId))
+        {
+            return
+            [
+                new RemedyItem(
+                    $"runtime.{kind}.missing",
+                    RemedySeverity.Warning,
+                    $"未检测到 {display}",
+                    $"本机没有找到 {display} 的可执行文件或安装目录。",
+                    "尚未安装，或安装在非常规位置且未登记主目录变量。",
+                    "依赖它的构建与调试流程无法进行。",
+                    RemediationPlan.Single(
+                        RemedyStep.Of(
+                            "envstation.pkg.install",
+                            $"通过 winget 安装 {display}",
+                            RemedyArgument.Of("manager", "winget"),
+                            RemedyArgument.Of("package", packageId),
+                            RemedyArgument.Of("accept_agreements", true)),
+                        $"通过 winget 安装 {packageId}"),
+                    RiskLevel.High,
+                    "envstation.detect.runtime"),
+            ];
+        }
 
         return
         [
@@ -574,6 +674,19 @@ public static class RemedyCatalog
                 "envstation.detect.runtime"),
         ];
     }
+
+    /// <summary>常见运行时 → winget 包 ID（用于一键安装）。</summary>
+    private static readonly ImmutableDictionary<string, string> WingetPackageIds =
+        new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
+        {
+            ["python"] = "Python.Python.3.12",
+            ["node"] = "OpenJS.NodeJS.LTS",
+            ["git"] = "Git.Git",
+            ["go"] = "GoLang.Go",
+            ["rust"] = "Rustlang.Rustup",
+            ["dotnet"] = "Microsoft.DotNet.SDK.8",
+            ["java"] = "EclipseAdoptium.Temurin.21.JDK",
+        }.ToImmutableDictionary(StringComparer.OrdinalIgnoreCase);
 
     private static string Get(IReadOnlyDictionary<string, string> outputs, string key) =>
         outputs.TryGetValue(key, out var value) ? value : string.Empty;

@@ -37,7 +37,7 @@ internal sealed partial class MainWindow
 
         page.Children.Add(UiKit.Title("待处理问题"));
         page.Children.Add(UiKit.Body(
-            "按严重度列出本机环境的问题与处置。只读检测，不修改系统。", secondary: true));
+            "按严重程度列出问题；能自动修的会给出修复按钮。", secondary: true));
 
         var (verdictCard, verdictBody) = UiKit.CardWithBody(DesignTokens.RhythmBetweenGroups);
         page.Children.Add(verdictCard);
@@ -121,7 +121,7 @@ internal sealed partial class MainWindow
 
         if (report is null)
         {
-            host.Children.Add(AppControls.EmptyState("尚未检测。", "开始检测", ReloadIssues));
+            host.Children.Add(AppControls.EmptyState("还没检测。", "开始检测", ReloadIssues));
             return;
         }
 
@@ -141,14 +141,14 @@ internal sealed partial class MainWindow
         else if (report.IsHealthy)
         {
             host.Children.Add(AppControls.EmptyState(
-                "没有需要处理的问题。",
+                "目前没有待处理项。",
                 "重新检测",
                 ReloadIssues));
         }
         else
         {
             host.Children.Add(AppControls.EmptyState(
-                "有检测项未能完成，暂时无法判断是否存在问题。",
+                "有几项检测没跑完，暂时不好下结论。",
                 "重试",
                 ReloadIssues));
         }
@@ -186,12 +186,12 @@ internal sealed partial class MainWindow
             content.Children.Add(IssueSection("怎么办", item.Plan.Summary));
             content.Children.Add(UiKit.ButtonBar(
                 UiKit.PrimaryButton(
-                    item.NeedsSecondConfirmation ? "查看变更" : "修复",
-                    () => SetStatus($"修复链路尚未接通：{item.Title}", "doctor"))));
+                    "修复",
+                    () => RunRemedyFixAsync(item, "doctor", ReloadIssues))));
         }
         else
         {
-            content.Children.Add(IssueSection("怎么办", "此项需要手工处理，环境站不代改。"));
+            content.Children.Add(IssueSection("怎么办", "这条得自己处理，程序不代改。"));
         }
 
         // 出处：这条结论由哪个检测项、依据哪条规则得出。用户报问题时这行最有用。

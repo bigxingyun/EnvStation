@@ -1,6 +1,8 @@
 ﻿using System.Globalization;
 
 using EnvStation.Abstractions;
+using EnvStation.App.Controls;
+using EnvStation.Core.Diagnostics;
 using AbsActions = EnvStation.Abstractions.Actions;
 using CoreActions = EnvStation.Core.Actions;
 using AbsPkg = EnvStation.Abstractions.Packages;
@@ -112,52 +114,75 @@ internal sealed partial class MainWindow
         var page = UiKit.Stack(UiKit.Space4);
         page.Children.Add(UiKit.Title("导入包"));
         page.Children.Add(UiKit.Body(
-            "导入 .envstation 包：校验内容与声明，逐项确认能力授权后执行。", secondary: true));
+            "选一个 .envstation 文件：校验 → 勾选能力 → 预演或执行。", secondary: true));
 
-        var pathBox = new TextBox
-        {
-            PlaceholderText = @"例如 D:\Downloads\python-env.envstation",
-            FontFamily = UiKit.UiFont,
-            FontSize = UiKit.Type("BodyMedium").Size,
-            MinHeight = 34,
-        };
+        var pathField = new FormField(
+            "包文件",
+            @"D:\Downloads\example.envstation",
+            browseAction: field =>
+            {
+                var picked = PickEnvStationFile();
+                if (picked is { Length: > 0 })
+                {
+                    field.Text = picked;
+                }
+            });
 
         var (pickerCard, pickerBody) = UiKit.CardWithBody(UiKit.Space3);
-        pickerBody.Children.Add(UiKit.SectionLabel("包文件"));
-        pickerBody.Children.Add(pathBox);
+        pickerBody.Children.Add(pathField.Root);
 
         var (reportCard, reportBody) = UiKit.CardWithBody(UiKit.Space2);
-        reportBody.Children.Add(UiKit.Body("尚未校验。", secondary: true));
+        reportBody.Children.Add(UiKit.Body("还没校验。", secondary: true));
 
         var (wallCard, wallBody) = UiKit.CardWithBody(UiKit.Space2);
-        wallBody.Children.Add(UiKit.Body("校验通过后列出该包申请的能力。", secondary: true));
+        wallBody.Children.Add(UiKit.Body("校验通过后，这里列出包申请的能力。", secondary: true));
 
         var (trialCard, trialBody) = UiKit.CardWithBody(UiKit.Space2);
         trialBody.Children.Add(UiKit.SectionLabel("沙箱试运行"));
         trialBody.Children.Add(UiKit.Body(
-            "在隔离目录中执行，核对声明与实际是否一致。不修改本机环境变量，不联网。", secondary: true));
-        trialBody.Children.Add(UiKit.Body("尚未试运行。", secondary: true));
+            "在隔离目录里跑一遍，核对声明和实际是否一致。不改本机、不联网。", secondary: true));
+        trialBody.Children.Add(UiKit.Body("还没试运行。", secondary: true));
+
+        var (runCard, runBody) = UiKit.CardWithBody(UiKit.Space2);
+        runBody.Children.Add(UiKit.SectionLabel("预演与执行"));
+        runBody.Children.Add(UiKit.Body("建议先预演，看清步骤再执行。", secondary: true));
 
         pickerBody.Children.Add(UiKit.ButtonBar(
-            UiKit.PrimaryButton("校验", () => ValidateAsync(pathBox.Text, reportBody, wallBody)),
-            UiKit.SecondaryButton("试运行", () => RunTrialAsync(pathBox.Text, trialBody))));
+            UiKit.PrimaryButton("校验", () => ValidateAsync(pathField.Text, reportBody, wallBody, runBody)),
+            UiKit.SecondaryButton("试运行", () => RunTrialAsync(pathField.Text, trialBody))));
 
         page.Children.Add(pickerCard);
         page.Children.Add(reportCard);
         page.Children.Add(wallCard);
         page.Children.Add(trialCard);
+        page.Children.Add(runCard);
         return UiKit.Scroll(page);
+    }
+
+    /// <summary>弹出文件选择框，挑选 .envstation 包。</summary>
+    private string? PickEnvStationFile()
+    {
+        try
+        {
+            var picker = new Windows.Storage.Pickers.FileOpenPicker();
+            var hwnd = WinRT.Interop.WindowNative.GetWindowHandle(this);
+            WinRT.Interop.InitializeWithWindow.Initialize(picker, hwnd);
+            picker.SuggestedStartLocation = Windows.Storage.Pickers.PickerLocationId.Downloads;
+            picker.FileTypeFilter.Add(".envstation");
+            picker.FileTypeFilter.Add("*");
+
+            var file = picker.PickSingleFileAsync().AsTask().GetAwaiter().GetResult();
+            return file?.Path;
+        }
+        catch (Exception)
+        {
+            return null;
+        }
     }
 
     /// <summary>
     /// 跑一次 V4 沙箱试运行并把结论渲染出来。
     /// </summary>
-    /// <remarks>
-    /// 界面上的这一步与 CLI 的 <c>envstation check --v4</c> 是同一段逻辑，
-    /// 界面这里只是把它变成"一个按钮 + 一段结论"。之所以值得放进产品界面：
-    /// 用户在导入别人分享的包之前，最想知道的是"它说的和它做的到底一不一样"，
-    /// 而这件事只有跑一遍才知道。
-    /// </remarks>
     private async void RunTrialAsync(string path, Panel host)
     {
         if (string.IsNullOrWhiteSpace(path))
@@ -211,7 +236,7 @@ internal sealed partial class MainWindow
         }
     }
 
-    private async void ValidateAsync(string path, Panel report, Panel wall)
+    private async void ValidateAsync(string path, Panel report, Panel wall, Panel runHost)
     {
         if (_bridge is null || string.IsNullOrWhiteSpace(path))
         {
@@ -235,9 +260,12 @@ internal sealed partial class MainWindow
             report.Children.Add(UiKit.Body(result.Report.ToText()));
 
             wall.Children.Clear();
+            runHost.Children.Clear();
+            runHost.Children.Add(UiKit.SectionLabel("预演与执行"));
 
             if (result.Manifest is not { } manifest)
             {
+                runHost.Children.Add(UiKit.Body("校验没过，先别执行。", secondary: true));
                 return;
             }
 
@@ -247,24 +275,78 @@ internal sealed partial class MainWindow
                 $"{manifest.Version}（标准 {manifest.SpecVersion} / 档位 {manifest.Tier}）")));
             report.Children.Add(UiKit.Row("质量评分", UiKit.Body($"{result.QualityScore} / 100")));
 
-            // 能力授权（需求 IMP-2 / IMP-3）：逐项独立勾选，且必须用人话说明。
-            wall.Children.Add(UiKit.SectionLabel("能力授权（逐项确认）"));
+            wall.Children.Add(UiKit.SectionLabel("能力授权"));
             wall.Children.Add(UiKit.Body(
-                "未勾选的能力，对应动作执行时将被拒绝。", secondary: true));
+                "没勾的能力，执行时会直接拒绝。", secondary: true));
 
+            var boxes = new List<CheckBox>();
             foreach (var (capability, explanation) in manifest.Permissions.OrderBy(static p => p.Key, StringComparer.Ordinal))
             {
                 var content = new StackPanel { Spacing = 2 };
                 content.Children.Add(UiKit.Mono(capability, "MonoSmall"));
                 content.Children.Add(UiKit.Body(explanation, secondary: true));
 
-                wall.Children.Add(new CheckBox
+                var box = new CheckBox
                 {
                     MinHeight = 32,
                     Tag = capability,
                     Content = content,
-                });
+                };
+                boxes.Add(box);
+                wall.Children.Add(box);
             }
+
+            if (!result.CanImport)
+            {
+                runHost.Children.Add(UiKit.Body("这个包不能导入。", secondary: true));
+                SetStatus($"已校验 {Path.GetFileName(path)} · 禁止导入", "packages");
+                return;
+            }
+
+            var hint = UiKit.Body("把需要的能力都勾上，才能预演或执行。", secondary: true);
+            runHost.Children.Add(hint);
+
+            Button? previewBtn = null;
+            Button? applyBtn = null;
+
+            void RefreshButtons()
+            {
+                var required = manifest.Permissions.Keys.ToHashSet(StringComparer.Ordinal);
+                var granted = boxes
+                    .Where(static b => b.IsChecked == true && b.Tag is string)
+                    .Select(static b => (string)b.Tag!)
+                    .ToHashSet(StringComparer.Ordinal);
+                var missing = required.Where(id => !granted.Contains(id)).ToArray();
+                var ready = missing.Length == 0;
+                if (previewBtn is not null)
+                {
+                    previewBtn.IsEnabled = ready;
+                }
+
+                if (applyBtn is not null)
+                {
+                    applyBtn.IsEnabled = ready;
+                }
+
+                hint.Text = ready
+                    ? "能力已齐。"
+                    : "还差：" + string.Join("、", missing);
+            }
+
+            foreach (var box in boxes)
+            {
+                box.Checked += (_, _) => RefreshButtons();
+                box.Unchecked += (_, _) => RefreshButtons();
+            }
+
+            previewBtn = UiKit.SecondaryButton("预演", () =>
+                RunPackageWorkflowAsync(path.Trim(), boxes, isDryRun: true, runHost));
+            applyBtn = UiKit.PrimaryButton("执行", () =>
+                RunPackageWorkflowAsync(path.Trim(), boxes, isDryRun: false, runHost));
+            previewBtn.IsEnabled = false;
+            applyBtn.IsEnabled = false;
+            runHost.Children.Add(UiKit.ButtonBar(previewBtn, applyBtn));
+            RefreshButtons();
 
             SetStatus($"已校验 {Path.GetFileName(path)} · 质量评分 {result.QualityScore}", "packages");
         }
@@ -275,17 +357,81 @@ internal sealed partial class MainWindow
         }
     }
 
+    private async void RunPackageWorkflowAsync(string path, List<CheckBox> boxes, bool isDryRun, Panel host)
+    {
+        if (!_kernel.IsAvailable)
+        {
+            SetStatus(_kernel.UnavailableReason ?? "内核不可用", "packages");
+            return;
+        }
+
+        var granted = boxes
+            .Where(static b => b.IsChecked == true && b.Tag is string)
+            .Select(static b => (string)b.Tag!)
+            .ToArray();
+
+        var read = KernelBridge.ReadPackage(path);
+        if (read.IsFailure)
+        {
+            SetStatus("无法读取包：" + read.Error.Message, "packages");
+            return;
+        }
+
+        if (!isDryRun)
+        {
+            if (UiXamlRoot is null)
+            {
+                SetStatus("界面尚未就绪。", "packages");
+                return;
+            }
+
+            var confirmed = await Confirm.ConfirmAsync(
+                UiXamlRoot,
+                "执行包",
+                $"按已勾选的能力执行「{read.Value.Manifest.Name}」。写入前会自动留快照。",
+                "能力：" + string.Join("、", granted),
+                Abstractions.Transactions.RiskLevel.High,
+                "执行").ConfigureAwait(true);
+            if (!confirmed)
+            {
+                SetStatus("已取消执行。", "packages");
+                return;
+            }
+        }
+
+        host.Children.Add(UiKit.Body(isDryRun ? "预演中…" : "执行中…", secondary: true));
+        SetStatus(isDryRun ? "正在预演包…" : "正在执行包…", "packages");
+
+        try
+        {
+            var outcome = await _kernel.RunWorkflowAsync(
+                read.Value.Workflow,
+                isDryRun,
+                granted,
+                [RemediationApplier.DefaultAuthorizedRoot]).ConfigureAwait(true);
+
+            var message = outcome.Message;
+            SetStatus((isDryRun ? "预演完成：" : "执行完成：") + message + (isDryRun ? string.Empty : " 新开一个终端后再看效果。"), "packages");
+            host.Children.Add(UiKit.Body(message));
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException)
+        {
+            SetStatus("包运行失败：" + ex.Message, "packages");
+            host.Children.Add(UiKit.Body("失败：" + ex.Message, secondary: true));
+        }
+    }
+
 
     private UIElement BuildActionsPage()
     {
         var page = UiKit.Stack(UiKit.Space4);
         page.Children.Add(UiKit.Title("动作库"));
         page.Children.Add(UiKit.Body(
-            "包可调用的全部预制动作，不含任意命令执行。", secondary: true));
+            "包里能用的动作一览。没有任意命令执行。", secondary: true));
 
         if (_bridge is null)
         {
-            page.Children.Add(UiKit.Body("内核未就绪。", secondary: true));
+            page.Children.Add(UiKit.Body("内核没起来。", secondary: true));
             return UiKit.Scroll(page);
         }
 

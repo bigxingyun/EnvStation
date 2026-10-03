@@ -62,6 +62,7 @@ internal static class Program
                 "run" => await RunAsync(args[1..]).ConfigureAwait(false),
                 "env" => await EnvAsync(args[1..]).ConfigureAwait(false),
                 "path" => await PathAsync(args[1..]).ConfigureAwait(false),
+                "install" => await InstallAsync(args[1..]).ConfigureAwait(false),
                 "fingerprint" => Fingerprint(args[1..]),
                 _ => Unknown(args[0]),
             };
@@ -103,15 +104,17 @@ internal static class Program
               run <包> [--apply] [--allow <能力ID>] [--root <目录>]   执行包内工作流
               env get|set|unset|diff|restore|validate
               path list|ensure|remove|clean|validate
+              install <包ID> [--manager winget|scoop|choco] [--apply]   通过包管理器安装（默认预演）
 
             安全默认值：
-              run 默认只做预演，打印将要发生的每一步；env、path 的写子命令默认只读。
+              run 默认只做预演，打印将要发生的每一步；env、path、install 的写子命令默认只读。
               要真正执行必须同时给出：
                 --apply            确认执行（不加则只预演）
                 --allow <能力ID>   逐项授权，可重复，没有全部同意开关
                 --root <目录>      授权可写的根目录，可重复
               示例：
                 envstation run pkg.envstation --apply --allow CAP.ENV.USER --root "%LOCALAPPDATA%\EnvStation"
+                envstation install Python.Python.3.12 --apply
 
             退出码：
               0  成功
@@ -808,6 +811,58 @@ internal static class Program
             Console.WriteLine("这是预演。要真正修改，加上 --apply。");
         }
 
+        return result.Success ? ExitOk : ExitFailure;
+    }
+
+    // ══════════════════════════ install ══════════════════════════
+
+    private static async Task<int> InstallAsync(string[] args)
+    {
+        if (args.Length == 0)
+        {
+            Console.Error.WriteLine("用法：envstation install <包ID> [--manager winget|scoop|choco] [--apply]");
+            return ExitUsage;
+        }
+
+        var packageId = args[0];
+        var manager = Option(args, "--manager") ?? "winget";
+        var apply = System.Environment.GetCommandLineArgs().Contains("--apply", StringComparer.Ordinal);
+
+        var findings = new FindingBag();
+        var registry = ActionRegistry.CreateDefault(findings);
+        if (registry.IsFailure)
+        {
+            return ExitFailure;
+        }
+
+        using var context = CreateContext(
+            registry.Value,
+            isDryRun: !apply,
+            capabilities: apply
+                ? new CapabilitySet([CapabilityIds.Inspect, CapabilityIds.PackageManager])
+                : new CapabilitySet([CapabilityIds.Inspect]));
+
+        if (!apply)
+        {
+            Console.WriteLine($"预演：将通过 {manager} 安装 {packageId}（未做任何修改）。");
+            Console.WriteLine("确认无误后加上 --apply 真正执行。");
+            return ExitOk;
+        }
+
+        var arguments = new Dictionary<string, AbsPkg.ScriptValue>(StringComparer.Ordinal)
+        {
+            ["manager"] = new AbsPkg.ScriptString(manager),
+            ["package"] = new AbsPkg.ScriptString(packageId),
+            ["accept_agreements"] = new AbsPkg.ScriptBoolean(true),
+        };
+
+        var result = await InvokeAsync(
+            registry.Value,
+            context,
+            "envstation.pkg.install",
+            arguments).ConfigureAwait(false);
+
+        Console.WriteLine(result.Message);
         return result.Success ? ExitOk : ExitFailure;
     }
 

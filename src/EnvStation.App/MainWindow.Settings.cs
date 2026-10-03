@@ -96,22 +96,23 @@ internal sealed partial class MainWindow
         panel.Children.Add(combo);
         panel.Children.Add(UiKit.Body(
             CurrentSettings.Theme == ThemeChoice.System
-                ? "当前跟随系统的应用模式。"
-                : "当前使用固定的主题。",
+                ? "跟系统走。"
+                : "固定主题。",
             secondary: true));
 
         return UiKit.Row("主题", panel);
     }
 
-    /// <summary>安全与还原：只读事实。这些是引擎行为，不是可选项——写成开关会误导用户。</summary>
+    /// <summary>安全与还原：只读事实，不是可选项。</summary>
     private static UIElement BuildSafetyCard()
     {
         var (card, body) = UiKit.CardWithBody(DesignTokens.RhythmInGroup);
 
         body.Children.Add(UiKit.SectionLabel("安全与还原"));
-        body.Children.Add(UiKit.Row("环境变量快照", UiKit.Body("写入前自动创建")));
-        body.Children.Add(UiKit.Row("配置文件备份", UiKit.Body("写入前备份，校验失败自动还原")));
-        body.Children.Add(UiKit.Row("权限", UiKit.Body("标准用户运行，系统级操作按需提权")));
+        body.Children.Add(UiKit.Row("环境变量快照", UiKit.Body("写入前自动留一份")));
+        body.Children.Add(UiKit.Row("配置文件备份", UiKit.Body("写入前备份，校验失败就还原")));
+        body.Children.Add(UiKit.Row("权限", UiKit.Body("普通用户运行；暂不写系统级变量")));
+        body.Children.Add(UiKit.Row("写操作", UiKit.Body("先预演，确认后再改；能力要逐项勾")));
 
         return card;
     }
@@ -130,13 +131,49 @@ internal sealed partial class MainWindow
 
         body.Children.Add(UiKit.SectionLabel("高级"));
         body.Children.Add(UiKit.Body(
-            "以下内容面向自动化包作者与审计者。", secondary: true));
+            "写包或查审计时用得上。", secondary: true));
 
         body.Children.Add(UiKit.ButtonBar(
-            UiKit.SecondaryButton($"能力与动作（{_kernel.ActionCount} 个）", () => Navigate(PageTags.Actions))));
+            UiKit.SecondaryButton($"能力与动作（{_kernel.ActionCount} 个）", () => Navigate(PageTags.Actions)),
+            UiKit.SecondaryButton("查看审计日志", OpenAuditFolder)));
 
         return card;
     }
+
+    private void OpenAuditFolder()
+    {
+        var directory = Path.Combine(
+            System.Environment.GetFolderPath(System.Environment.SpecialFolder.LocalApplicationData),
+            "EnvStation",
+            "audit");
+
+        try
+        {
+            Directory.CreateDirectory(directory);
+            var newest = Directory.EnumerateFiles(directory, "*.jsonl")
+                .OrderByDescending(File.GetLastWriteTimeUtc)
+                .FirstOrDefault();
+
+            if (newest is null)
+            {
+                SetStatus("还没有审计日志。做过写操作之后会有。", "settings");
+                return;
+            }
+
+            // 只读打开最近一份：用记事本，避免在本程序里再造一套日志浏览器。
+            System.Diagnostics.Process.Start(new System.Diagnostics.ProcessStartInfo
+            {
+                FileName = newest,
+                UseShellExecute = true,
+            });
+            SetStatus("已打开最近审计日志：" + Path.GetFileName(newest), "settings");
+        }
+        catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidOperationException)
+        {
+            SetStatus("无法打开审计日志：" + ex.Message, "settings");
+        }
+    }
+
     private UIElement BuildAboutCard()
     {
         var (card, body) = UiKit.CardWithBody(DesignTokens.RhythmInGroup);

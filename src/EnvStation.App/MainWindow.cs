@@ -49,6 +49,9 @@ internal sealed partial class MainWindow : Window
     /// </remarks>
     private readonly IKernelService _kernel;
 
+    /// <summary>写操作统一入口：预演 → 确认 → 执行。</summary>
+    private readonly ApplySession _apply;
+
     /// <summary>
     /// 当前的用户设置（主题、窗口尺寸、上次所在页面）。
     /// </summary>
@@ -140,6 +143,7 @@ internal sealed partial class MainWindow : Window
         // _bridge 保留给尚未迁移到视图模型的旧页面使用，M1-6 逐页拆完后即可删除。
         var service = KernelService.Create(_startupFindings);
         _kernel = service;
+        _apply = new ApplySession(_kernel);
         _bridge = service.IsAvailable ? KernelBridge.Create(_startupFindings).Value : null;
         UiKit.Theme = ToElementTheme(settings.Theme);
 
@@ -256,6 +260,48 @@ internal sealed partial class MainWindow : Window
     /// </remarks>
     internal string DefaultStatus =>
         _kernel.IsAvailable ? $"就绪 · {_kernel.ActionCount} 个动作" : "内核未就绪";
+
+    /// <summary>当前窗口的 XamlRoot（确认框必需）。</summary>
+    private XamlRoot? UiXamlRoot => _root.XamlRoot;
+
+    /// <summary>
+    /// 对一条待办项走完预演 → 确认 → 执行 → 复检。
+    /// </summary>
+    private async void RunRemedyFixAsync(RemedyItem item, string pageTag, Action reload)
+    {
+        ArgumentNullException.ThrowIfNull(item);
+        ArgumentNullException.ThrowIfNull(reload);
+
+        if (UiXamlRoot is null)
+        {
+            SetStatus("界面尚未就绪，请稍后再试。", pageTag);
+            return;
+        }
+
+        if (!item.ShouldOfferFix)
+        {
+            SetStatus("此项不可自动修复。", pageTag);
+            return;
+        }
+
+        SetStatus($"正在预览修复：{item.Title}", pageTag);
+
+        try
+        {
+            var outcome = await _apply.ApplyRemedyAsync(item, UiXamlRoot).ConfigureAwait(true);
+            var suffix = outcome.Succeeded ? " 新开一个终端后再看效果。" : string.Empty;
+            SetStatus(outcome.Message + suffix, pageTag);
+
+            if (outcome.Succeeded)
+            {
+                reload();
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            SetStatus("修复失败：" + ex.Message, pageTag);
+        }
+    }
 
     /// <summary>
     /// 写状态栏。不带页面标签时视为"任何页面都可以显示"。

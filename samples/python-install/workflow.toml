@@ -1,0 +1,27 @@
+﻿default_on_error = "rollback"
+
+[[steps]]
+id       = "install-python"
+uses     = "envstation.pkg.install@1.0.0"
+register = "install"
+
+[steps.with]
+manager = "winget"
+package = "Python.Python.3.12"
+accept_agreements = true
+
+[[steps]]
+id       = "detect-python"
+uses     = "envstation.detect.runtime@1.0.0"
+register = "py"
+
+[steps.with]
+kind = "python"
+
+[[steps]]
+id   = "report"
+uses = "envstation.ui.notify@1.0.0"
+
+[steps.with]
+level = "info"
+message = "Python 安装步骤完成。检出：${pkg.py.found}，版本：${pkg.py.version}。请新开终端验证 python --version。"

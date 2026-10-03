@@ -37,7 +37,7 @@ internal sealed partial class MainWindow
 
         page.Children.Add(UiKit.Title("环境变量"));
         page.Children.Add(UiKit.Body(
-            "用户级与系统级变量。PATH 按条目展开，便于看清失效与重复。只读检测。", secondary: true));
+            "用户级 / 系统级变量；PATH 按条列出。用户级可清理失效和重复项。", secondary: true));
 
         var (headCard, headBody) = UiKit.CardWithBody(DesignTokens.RhythmBetweenGroups);
         page.Children.Add(headCard);
@@ -104,13 +104,15 @@ internal sealed partial class MainWindow
 
         verdictHost.Children.Add(UiKit.Body(
             problems > 0
-                ? $"PATH 中有 {problems} 条需要注意（不存在、重复、空条目、变量未解析，或以分隔符结尾）。"
-                : "PATH 中未发现失效、重复或空条目。",
+                ? $"PATH 有 {problems} 条有问题（路径不存在、重复、空项、变量解不开等）。"
+                : "PATH 看起来正常。",
             secondary: true));
         verdictHost.Children.Add(UiKit.Body(
-            $"本页共读到用户级变量 {viewModel.UserVariables.Length} 个、系统级变量 {viewModel.MachineVariables.Length} 个。",
+            $"用户级变量 {viewModel.UserVariables.Length} 个，系统级 {viewModel.MachineVariables.Length} 个。",
             secondary: true));
-        verdictHost.Children.Add(UiKit.ButtonBar(UiKit.SecondaryButton("重新读取", ReloadEnvironment)));
+        verdictHost.Children.Add(UiKit.ButtonBar(
+            UiKit.SecondaryButton("重新读取", ReloadEnvironment),
+            UiKit.PrimaryButton("清理用户 PATH", () => CleanUserPathAsync())));
 
         RenderPath(viewModel, body);
         RenderVariables(viewModel, body);
@@ -121,7 +123,7 @@ internal sealed partial class MainWindow
     }
 
     /// <summary>PATH 分条视图（用户级 + 系统级）。</summary>
-    private static void RenderPath(EnvPageViewModel viewModel, Panel host)
+    private void RenderPath(EnvPageViewModel viewModel, Panel host)
     {
         if (viewModel.PathEntries.Length == 0)
         {
@@ -135,13 +137,101 @@ internal sealed partial class MainWindow
         foreach (var entry in viewModel.PathEntries)
         {
             body.Children.Add(BuildPathRow(entry));
+            if (!entry.IsHealthy && entry.Scope == "user" && entry.Raw.Length > 0)
+            {
+                var removeBar = UiKit.ButtonBar(
+                    UiKit.SecondaryButton("移除该项", () => RemovePathEntryAsync(entry)));
+                removeBar.Margin = new Thickness(46, 0, 0, UiKit.Space2);
+                body.Children.Add(removeBar);
+            }
         }
 
         body.Children.Add(UiKit.Body(
-            "每一项的状态由 envstation.path.validate 判定：不存在、重复、空条目、变量未解析。",
+            "状态来自 path.validate：路径不存在、重复、空项、变量解不开。",
             secondary: true));
 
         host.Children.Add(card);
+    }
+
+    private async void CleanUserPathAsync()
+    {
+        if (UiXamlRoot is null)
+        {
+            SetStatus("界面尚未就绪。", "env");
+            return;
+        }
+
+        var plan = new RemediationPlan(
+            [
+                RemedyStep.Of(
+                    "envstation.path.clean",
+                    "清理用户级 PATH 失效项",
+                    RemedyArgument.Of("scope", "user"),
+                    RemedyArgument.Of("include_duplicates", false)),
+                RemedyStep.Of(
+                    "envstation.path.dedupe",
+                    "去掉用户级 PATH 重复项",
+                    RemedyArgument.Of("scope", "user")),
+            ],
+            "清理并去重用户级 PATH");
+
+        SetStatus("正在预览 PATH 清理…", "env");
+        try
+        {
+            var outcome = await _apply.ApplyPlanAsync(
+                plan,
+                Abstractions.Transactions.RiskLevel.Reversible,
+                "清理用户级 PATH",
+                "将移除不存在的目录、空条目，并去掉重复项。系统级 PATH 不会改动。",
+                UiXamlRoot).ConfigureAwait(true);
+
+            SetStatus(outcome.Message + (outcome.Succeeded ? " 新开一个终端后再看效果。" : string.Empty), "env");
+            if (outcome.Succeeded)
+            {
+                ReloadEnvironment();
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            SetStatus("清理失败：" + ex.Message, "env");
+        }
+    }
+
+    private async void RemovePathEntryAsync(PathEntryView entry)
+    {
+        if (UiXamlRoot is null || entry.Scope != "user")
+        {
+            SetStatus(entry.Scope != "user" ? "系统级 PATH 目前不能在界面里改。" : "界面还没就绪。", "env");
+            return;
+        }
+
+        var plan = RemediationPlan.Single(
+            RemedyStep.Of(
+                "envstation.path.remove",
+                $"移除 {entry.Raw}",
+                RemedyArgument.Of("scope", "user"),
+                RemedyArgument.Of("entry", entry.Raw)),
+            $"从用户级 PATH 移除 {entry.Raw}");
+
+        try
+        {
+            var outcome = await _apply.ApplyPlanAsync(
+                plan,
+                Abstractions.Transactions.RiskLevel.Reversible,
+                "移除 PATH 条目",
+                $"将从用户级 PATH 删除：{entry.Raw}",
+                UiXamlRoot).ConfigureAwait(true);
+
+            SetStatus(outcome.Message + (outcome.Succeeded ? " 新开一个终端后再看效果。" : string.Empty), "env");
+            if (outcome.Succeeded)
+            {
+                ReloadEnvironment();
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            SetStatus("移除失败：" + ex.Message, "env");
+        }
     }
 
     private static UIElement BuildPathRow(PathEntryView entry)
@@ -158,7 +248,6 @@ internal sealed partial class MainWindow
 
         var dot = AppControls.StatusDot(entry.Tone, 10);
 
-        // 序号与作用域：用户要能把这一行跟系统对话框里的位置对上。
         var ordinal = UiKit.Text(
             $"{entry.Index + 1}",
             "MonoSmall",
@@ -181,7 +270,6 @@ internal sealed partial class MainWindow
         row.Children.Add(path);
         row.Children.Add(badge);
 
-        // 有问题的那一项补一行说明：只说"异常"用户不知道异常在哪。
         if (entry.IssueText.Length == 0)
         {
             return row;

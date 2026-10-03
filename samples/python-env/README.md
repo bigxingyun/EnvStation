@@ -1,13 +1,16 @@
-﻿# 环境站示例包
+﻿# python-env 示例
 
-这个包只做两件事：检测 Python，并检查 PATH。
+检测本机有没有 Python，并检查用户 PATH。
 
-它申请了两个能力：
+申请的能力：
+
 - `CAP.INSPECT`：只读探测
-- `CAP.PATH.MODIFY`：在你确认后修改用户级 PATH
+- `CAP.PATH.MODIFY`：在你确认后改用户 PATH（本示例工作流未必会写）
 
-安装：
+```powershell
+dotnet run --project src\EnvStation.Cli -c Release -- pack .\samples\python-env --out .\python-env.envstation
+dotnet run --project src\EnvStation.Cli -c Release -- check .\python-env.envstation --v4
+dotnet run --project src\EnvStation.Cli -c Release -- run .\python-env.envstation
 ```
-envstation check python-env.envstation
-envstation run python-env.envstation --apply --allow CAP.INSPECT --allow CAP.PATH.MODIFY --root "%LOCALAPPDATA%\EnvStation"
-```
+
+写包步骤见仓库根目录 README 的「如何编写包」。

@@ -220,7 +220,7 @@ public static class RemedyItems
         var list = items as IReadOnlyCollection<RemedyItem> ?? [.. items];
         if (list.Count == 0)
         {
-            return "未发现问题。";
+            return "没有发现问题。";
         }
 
         var critical = list.CriticalCount();
@@ -228,22 +228,22 @@ public static class RemedyItems
         var parts = new List<string>(2);
         if (critical > 0)
         {
-            parts.Add($"严重 {critical} 项");
+            parts.Add($"严重 {critical}");
         }
 
         if (warning > 0)
         {
-            parts.Add($"警告 {warning} 项");
+            parts.Add($"警告 {warning}");
         }
 
         var advice = list.Count - critical - warning;
         if (advice > 0)
         {
-            parts.Add($"建议 {advice} 项");
+            parts.Add($"建议 {advice}");
         }
 
         var fixable = list.FixableCount();
-        var tail = fixable > 0 ? $"，其中 {fixable} 项可一键修复。" : "。";
-        return $"发现 {list.Count} 项：" + string.Join("、", parts) + tail;
+        var tail = fixable > 0 ? $"，{fixable} 条能自动修。" : "。";
+        return $"一共 {list.Count} 条：" + string.Join("、", parts) + tail;
     }
 }

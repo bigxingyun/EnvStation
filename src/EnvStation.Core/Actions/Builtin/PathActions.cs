@@ -153,6 +153,7 @@ internal sealed class PathEnsureAction : PathActionBase
             new ParameterSpec("position", ParameterType.Enum, false,
                 "插入位置。append = 追加到末尾（默认，不改变现有优先级）；prepend = 插到最前（会抢走同名命令的优先级）",
                 AllowedValues: ["append", "prepend"]),
+            Bool("dry_run", "只报告将要加入的目录，不做修改", false),
         ],
         ConditionalCapabilities: [CapabilityIds.EnvironmentMachine]);
 
@@ -169,6 +170,7 @@ internal sealed class PathEnsureAction : PathActionBase
 
         var entry = arguments.GetString("entry")!;
         var positionText = arguments.GetString("position") ?? "append";
+        var dryRun = arguments.GetBoolean("dry_run", false);
 
         var path = ReadPath(context, scope);
         if (path.IsFailure)
@@ -188,6 +190,21 @@ internal sealed class PathEnsureAction : PathActionBase
 
         var position = positionText == "prepend" ? PathPosition.Prepend : PathPosition.Append;
         var plan = PathEditor.Ensure(path.Value.Entries, entry, position);
+        if (dryRun)
+        {
+            var changes = plan.Changes
+                .Select(static c => $"{c.Kind}:{c.Value}（{c.Reason}）")
+                .ToArray();
+            return Ok(
+                plan.HasChanges
+                    ? $"预演结果：将把 {entry} 加入 PATH（未做任何修改）"
+                    : "预演结果：PATH 中已有该目录，无需修改。",
+                Outputs(
+                    ("changed", "false"),
+                    ("dry_run", "true"),
+                    ("would_remove", string.Join(" || ", changes)),
+                    ("summary", plan.Summarize())));
+        }
 
         var applied = ApplyPlan(
             context, scope, plan, $"path.ensure {EnvironmentPathResolver.ToScopeName(scope)} {entry}");
@@ -219,6 +236,7 @@ internal sealed class PathRemoveAction : PathActionBase
         [
             ScopeParameter,
             Str("entry", true, "要移除的目录（大小写与首尾分隔符容错）", maxLength: 512),
+            Bool("dry_run", "只报告将要移除的目录，不做修改", false),
         ],
         ConditionalCapabilities: [CapabilityIds.EnvironmentMachine]);
 
@@ -234,6 +252,7 @@ internal sealed class PathRemoveAction : PathActionBase
         }
 
         var entry = arguments.GetString("entry")!;
+        var dryRun = arguments.GetBoolean("dry_run", false);
 
         var path = ReadPath(context, scope);
         if (path.IsFailure)
@@ -242,6 +261,22 @@ internal sealed class PathRemoveAction : PathActionBase
         }
 
         var plan = PathEditor.Remove(path.Value.Entries, entry);
+        if (dryRun)
+        {
+            var changes = plan.Changes
+                .Select(static c => $"{c.Kind}:{c.Value}（{c.Reason}）")
+                .ToArray();
+            return Ok(
+                plan.HasChanges
+                    ? $"预演结果：将从 PATH 移除 {entry}（未做任何修改）"
+                    : "预演结果：PATH 中没有该项，无需修改。",
+                Outputs(
+                    ("changed", "false"),
+                    ("dry_run", "true"),
+                    ("would_remove", string.Join(" || ", changes)),
+                    ("summary", plan.Summarize())));
+        }
+
         var applied = ApplyPlan(
             context, scope, plan, $"path.remove {EnvironmentPathResolver.ToScopeName(scope)} {entry}");
         if (applied.IsFailure)
@@ -268,7 +303,11 @@ internal sealed class PathDedupeAction : PathActionBase
         RequiresUserPresence: false,
         DefaultTimeoutSeconds: 60,
         TouchedResources: ["registry.write", "filesystem.write"],
-        Parameters: [ScopeParameter],
+        Parameters:
+        [
+            ScopeParameter,
+            Bool("dry_run", "只报告将要移除的重复项，不做修改", false),
+        ],
         ConditionalCapabilities: [CapabilityIds.EnvironmentMachine]);
 
     /// <inheritdoc />
@@ -282,6 +321,7 @@ internal sealed class PathDedupeAction : PathActionBase
             return FailFrom(capability.Error);
         }
 
+        var dryRun = arguments.GetBoolean("dry_run", false);
         var path = ReadPath(context, scope);
         if (path.IsFailure)
         {
@@ -289,6 +329,25 @@ internal sealed class PathDedupeAction : PathActionBase
         }
 
         var plan = PathEditor.Dedupe(path.Value.Entries);
+        if (dryRun)
+        {
+            var wouldRemove = plan.Changes
+                .Where(static c => c.Kind == PathChangeKind.Removed)
+                .Select(static c => $"{c.Value}（{c.Reason}）")
+                .ToArray();
+
+            return Ok(
+                wouldRemove.Length == 0
+                    ? "预演结果：PATH 中没有重复项。"
+                    : $"预演结果：将移除 {wouldRemove.Length} 项重复 —— {string.Join("、", wouldRemove)}（未做任何修改）",
+                Outputs(
+                    ("changed", "false"),
+                    ("dry_run", "true"),
+                    ("would_remove_count", wouldRemove.Length.ToString(CultureInfo.InvariantCulture)),
+                    ("would_remove", string.Join(" || ", wouldRemove)),
+                    ("summary", plan.Summarize())));
+        }
+
         var applied = ApplyPlan(context, scope, plan, $"path.dedupe {EnvironmentPathResolver.ToScopeName(scope)}");
         if (applied.IsFailure)
         {
@@ -321,6 +380,7 @@ internal sealed class PathPrioritizeAction : PathActionBase
             new ParameterSpec("index", ParameterType.Integer, true,
                 "目标位置（从 0 开始）。0 表示插到最前，使其优先于其他同名命令",
                 Minimum: 0, Maximum: 10000),
+            Bool("dry_run", "只报告将要调整的顺序，不做修改", false),
         ],
         ConditionalCapabilities: [CapabilityIds.EnvironmentMachine]);
 
@@ -337,6 +397,7 @@ internal sealed class PathPrioritizeAction : PathActionBase
 
         var entry = arguments.GetString("entry")!;
         var index = (int)arguments.GetInt64("index");
+        var dryRun = arguments.GetBoolean("dry_run", false);
 
         var path = ReadPath(context, scope);
         if (path.IsFailure)
@@ -353,6 +414,22 @@ internal sealed class PathPrioritizeAction : PathActionBase
         }
 
         var plan = PathEditor.Prioritize(path.Value.Entries, entry, index);
+        if (dryRun)
+        {
+            var changes = plan.Changes
+                .Select(static c => $"{c.Kind}:{c.Value}（{c.Reason}）")
+                .ToArray();
+            return Ok(
+                plan.HasChanges
+                    ? $"预演结果：将把 {entry} 移到位置 {index}（未做任何修改）"
+                    : "预演结果：PATH 顺序无需调整。",
+                Outputs(
+                    ("changed", "false"),
+                    ("dry_run", "true"),
+                    ("would_remove", string.Join(" || ", changes)),
+                    ("summary", plan.Summarize())));
+        }
+
         var applied = ApplyPlan(
             context, scope, plan, $"path.prioritize {EnvironmentPathResolver.ToScopeName(scope)} {entry} -> {index}");
         if (applied.IsFailure)

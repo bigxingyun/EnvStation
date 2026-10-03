@@ -1,0 +1,17 @@
+﻿spec_version = "1.0"
+id           = "x-example.python-install"
+version      = "1.0.0"
+name         = "Python 3.12 安装（winget）"
+license      = "MIT"
+tier         = "T0-b"
+
+[requirements]
+os   = ">=10.0.17763"
+arch = ["x64", "arm64"]
+
+[permissions]
+"CAP.PKG.MANAGER" = "通过 winget 安装 Python.Python.3.12"
+"CAP.INSPECT"     = "安装后检测本机是否已有 Python"
+
+[network]
+allow = []

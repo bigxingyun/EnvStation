@@ -37,7 +37,7 @@ internal sealed partial class MainWindow
 
         page.Children.Add(UiKit.Title("运行时"));
         page.Children.Add(UiKit.Body(
-            "本机已安装的语言与工具链。只读检测，不修改系统。", secondary: true));
+            "本机已装的语言和工具。缺的可以用包管理器装（需本机有 winget 等）。", secondary: true));
 
         var (headCard, headBody) = UiKit.CardWithBody(DesignTokens.RhythmBetweenGroups);
         page.Children.Add(headCard);
@@ -100,7 +100,7 @@ internal sealed partial class MainWindow
         }
 
         await viewModel.ScanAsync(
-            status => AppendRuntimeRow(status, groupHosts, groupCards)).ConfigureAwait(true);
+            status => AppendRuntimeRow(status, viewModel, groupHosts, groupCards)).ConfigureAwait(true);
 
         if (!ReferenceEquals(_runtimes, viewModel))
         {
@@ -131,19 +131,19 @@ internal sealed partial class MainWindow
         // 现在直接给出来，而不是等他点进安装流程再告诉他走不通。
         verdictHost.Children.Add(UiKit.Body(
             viewModel.CanInstallViaPackageManager
-                ? $"{viewModel.PackageManagerSummary}安装时会使用 {viewModel.SelectedPackageManager}，下载与完整性校验由它负责。"
+                ? $"{viewModel.PackageManagerSummary}安装走 {viewModel.SelectedPackageManager}，下载和校验也归它。"
                 : viewModel.PackageManagerSummary,
             secondary: true));
 
         verdictHost.Children.Add(UiKit.Body(
-            $"清单共 {viewModel.Total} 项。未检出的条目表示本机尚未安装，不是错误。",
+            $"共查 {viewModel.Total} 项。没找到的只是本机没装，不算故障。",
             secondary: true));
         verdictHost.Children.Add(UiKit.ButtonBar(UiKit.SecondaryButton("重新检测", ReloadRuntimes)));
 
         if (viewModel.FoundCount == 0)
         {
             body.Children.Insert(0, AppControls.EmptyState(
-                "本机没有检出清单里的任何运行时。",
+                "清单里的运行时，这台机器一个都没装。",
                 "重新检测",
                 ReloadRuntimes));
         }
@@ -152,8 +152,9 @@ internal sealed partial class MainWindow
     }
 
     /// <summary>追加一行运行时（含分组下钻与未检出行的弱化处理）。</summary>
-    private static void AppendRuntimeRow(
+    private void AppendRuntimeRow(
         RuntimeStatus status,
+        RuntimeViewModel viewModel,
         Dictionary<string, StackPanel> groupHosts,
         Dictionary<string, Border> groupCards)
     {
@@ -184,7 +185,6 @@ internal sealed partial class MainWindow
 
         var dot = AppControls.StatusDot(status.Tone, 10);
 
-        // 未检出的条目用次要色：它们不是错误，只是"这台机器上还没有"。
         var name = UiKit.Body(status.Entry.DisplayName, secondary: !status.Found);
         name.VerticalAlignment = VerticalAlignment.Center;
 
@@ -197,7 +197,6 @@ internal sealed partial class MainWindow
         path.TextTrimming = TextTrimming.CharacterEllipsis;
         path.VerticalAlignment = VerticalAlignment.Center;
 
-        // 技术值可选中：用户要把版本或路径贴进工单时不必手打。
         var source = UiKit.Body(status.Found ? status.Source : string.Empty, secondary: true);
         source.VerticalAlignment = VerticalAlignment.Center;
 
@@ -214,12 +213,56 @@ internal sealed partial class MainWindow
 
         host.Children.Add(row);
 
-        // 检测本身失败时补一行说明：这一行与其他"未检出"看起来一样，但原因完全不同。
         if (!status.Succeeded)
         {
             var note = UiKit.Body($"检测未完成：{status.Message}", secondary: true);
             note.Margin = new Thickness(24, 0, 0, UiKit.Space2);
             host.Children.Add(note);
+        }
+        else if (!status.Found && viewModel.CanInstallViaPackageManager)
+        {
+            var installBar = UiKit.ButtonBar(
+                UiKit.PrimaryButton("安装", () => InstallRuntimeAsync(status.Entry.Kind, status.Entry.DisplayName)));
+            installBar.Margin = new Thickness(24, 0, 0, UiKit.Space2);
+            host.Children.Add(installBar);
+        }
+    }
+
+    private async void InstallRuntimeAsync(string kind, string displayName)
+    {
+        if (UiXamlRoot is null)
+        {
+            SetStatus("界面尚未就绪。", "runtime");
+            return;
+        }
+
+        var remedies = RemedyCatalog.FromDetection(
+            "envstation.detect.runtime",
+            new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["kind"] = kind,
+                ["found"] = "false",
+            });
+
+        if (remedies.IsDefaultOrEmpty || !remedies[0].ShouldOfferFix)
+        {
+            SetStatus($"暂不支持自动安装 {displayName}。", "runtime");
+            return;
+        }
+
+        SetStatus($"正在预览安装 {displayName}…", "runtime");
+        try
+        {
+            var outcome = await _apply.ApplyRemedyAsync(remedies[0], UiXamlRoot).ConfigureAwait(true);
+            SetStatus(outcome.Message + (outcome.Succeeded ? " 新开一个终端后再看效果。" : string.Empty), "runtime");
+            if (outcome.Succeeded)
+            {
+                ReloadRuntimes();
+            }
+        }
+        catch (Exception ex) when (ex is InvalidOperationException or IOException or UnauthorizedAccessException)
+        {
+            SetStatus("安装失败：" + ex.Message, "runtime");
         }
     }
 }

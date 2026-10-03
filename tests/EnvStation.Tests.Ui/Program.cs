@@ -50,6 +50,7 @@ internal static class Program
         WriteProbeCases(h);
         DetectionRemedyCases(h);
         WiringCases(h);
+        RemediationApplyCases(h);
 
         var code = h.Summarize();
 
@@ -137,12 +138,12 @@ internal static class Program
 
         h.Case("UI-13", "待办项：汇总句不得把「有异常」说成「正常」", () =>
         {
-            Assert.Equal("未发现问题。", Array.Empty<RemedyItem>().Summarize(), "没有待办项才是没问题。");
+            Assert.Equal("没有发现问题。", Array.Empty<RemedyItem>().Summarize(), "没有待办项才是没问题。");
 
             var summary = new[] { MakeRemedy("a", RemedySeverity.Critical, RiskLevel.High) }.Summarize();
-            Assert.Contains("严重 1 项", summary, "汇总必须报出严重级数量。");
-            Assert.Contains("可一键修复", summary, "有可修复项时应告知。");
-            Assert.NotContains("未发现问题", summary, "有严重项时绝不能说没问题。");
+            Assert.Contains("严重 1", summary, "汇总必须报出严重级数量。");
+            Assert.Contains("能自动修", summary, "有可修复项时应告知。");
+            Assert.NotContains("没有发现问题", summary, "有严重项时绝不能说没问题。");
         });
     }
 
@@ -1719,9 +1720,12 @@ internal static class Program
 
             var items = RemedyCatalog.FromDetection("envstation.detect.runtime", outputs);
             Assert.Equal(1, items.Length, "未检测到时应产出一条待办项。");
-            Assert.Contains("envstation.runtime.install",
+            Assert.Contains("envstation.pkg.install",
                 string.Join(",", items[0].Plan.ActionIds),
                 "这条待办项必须直接给出安装动作，而不是只写一行说明。");
+            Assert.Contains("Python.Python.3.12",
+                string.Join(",", items[0].Plan.Steps.SelectMany(static s => s.Arguments.Select(static a => a.Text ?? string.Empty))),
+                "Python 缺失应映射到已知的 winget 包 ID。");
         });
 
         h.Case("UI-09", "接线：已找到运行时不得报缺件", () =>
@@ -1735,6 +1739,21 @@ internal static class Program
 
             Assert.Equal(0, RemedyCatalog.FromDetection("envstation.detect.runtime", outputs).Length,
                 "找到了就不该报缺件。");
+        });
+
+        h.Case("UI-203", "接线：冲突在能识别用户路径时指向 path.prioritize", () =>
+        {
+            var user = Environment.GetFolderPath(Environment.SpecialFolder.UserProfile);
+            var outputs = new Dictionary<string, string>(StringComparer.Ordinal)
+            {
+                ["conflict_count"] = "1",
+                ["conflicts"] = $"[知识库] yarn 有 2 个来源：C:\\Hadoop\\bin\\yarn.exe → {user}\\AppData\\Roaming\\npm\\yarn.cmd。",
+            };
+
+            var items = RemedyCatalog.FromDetection("envstation.detect.conflict", outputs);
+            Assert.Equal(1, items.Length, "应产出一条冲突待办。");
+            Assert.True(items[0].CanAutoFix, "用户目录可识别时应当可自动调整优先级。");
+            Assert.Contains("envstation.path.prioritize", string.Join(",", items[0].Plan.ActionIds), "应指向 prioritize。");
         });
     }
 
@@ -1980,6 +1999,138 @@ internal static class Program
         }
 
         return map;
+    }
+
+    private static void RemediationApplyCases(TestHarness h)
+    {
+        h.Case("UI-200", "编排：参数映射把布尔/整数/字符串转成 ScriptValue", () =>
+        {
+            var args = RemedyArgumentMapper.ToScriptValues(
+            [
+                RemedyArgument.Of("scope", "user"),
+                RemedyArgument.Of("include_duplicates", false),
+                RemedyArgument.Of("index", 0L),
+            ]);
+
+            Assert.True(args["scope"] is EnvStation.Abstractions.Packages.ScriptString { Value: "user" }, "scope 应为字符串。");
+            Assert.True(args["include_duplicates"] is EnvStation.Abstractions.Packages.ScriptBoolean { Value: false }, "布尔参数应保留。");
+            Assert.True(args["index"] is EnvStation.Abstractions.Packages.ScriptInteger { Value: 0 }, "整数参数应保留。");
+        });
+
+        h.Case("UI-201", "编排：用户取消确认时不调用真正执行", () =>
+        {
+            var calls = new List<(string Id, bool Dry)>();
+            var descriptors = new Dictionary<string, EnvStation.Abstractions.Actions.ActionDescriptor>(StringComparer.Ordinal)
+            {
+                ["envstation.path.clean"] = new(
+                    "envstation.path.clean",
+                    "1.0.0",
+                    EnvStation.Abstractions.Actions.CapabilityIds.PathModify,
+                    "清理 PATH",
+                    IsIdempotent: true,
+                    IsParallelSafe: false,
+                    HasInverse: true,
+                    RequiresUserPresence: false,
+                    DefaultTimeoutSeconds: 60,
+                    TouchedResources: [],
+                    Parameters:
+                    [
+                        new EnvStation.Abstractions.Actions.ParameterSpec(
+                            "dry_run", EnvStation.Abstractions.Actions.ParameterType.Boolean, false, "预演"),
+                    ]),
+            };
+
+            var applier = new RemediationApplier(
+                (id, args, dry, granted, roots, _) =>
+                {
+                    calls.Add((id, dry));
+                    var dryFlag = args is not null
+                        && args.TryGetValue("dry_run", out var v)
+                        && v is EnvStation.Abstractions.Packages.ScriptBoolean { Value: true };
+                    return Task.FromResult(EnvStation.Abstractions.Actions.ActionResult.Ok(
+                        dryFlag ? "预演" : "已执行",
+                        new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["dry_run"] = dryFlag ? "true" : "false",
+                            ["summary"] = dryFlag ? "将清理" : "已清理",
+                        }));
+                },
+                id => descriptors.TryGetValue(id, out var d) ? d : null);
+
+            var plan = RemediationPlan.Single(
+                RemedyStep.Of("envstation.path.clean", "清理失效项", RemedyArgument.Of("scope", "user")),
+                "清理用户级 PATH");
+
+            var outcome = applier.RunAsync(
+                plan,
+                RiskLevel.Reversible,
+                "清理 PATH",
+                "将移除失效目录",
+                (_, _) => Task.FromResult(false)).GetAwaiter().GetResult();
+
+            Assert.True(outcome.Cancelled, "用户取消必须反映在结果里。");
+            Assert.False(outcome.Applied, "取消时不得标记为已执行。");
+            Assert.Equal(1, calls.Count, "取消前只应跑预演一次。");
+            Assert.Contains("已取消", outcome.Message, "取消文案应说明未修改。");
+        });
+
+        h.Case("UI-202", "编排：确认后按同一参数真正执行", () =>
+        {
+            var dryFlags = new List<bool>();
+            var descriptors = new Dictionary<string, EnvStation.Abstractions.Actions.ActionDescriptor>(StringComparer.Ordinal)
+            {
+                ["envstation.path.dedupe"] = new(
+                    "envstation.path.dedupe",
+                    "1.0.0",
+                    EnvStation.Abstractions.Actions.CapabilityIds.PathModify,
+                    "去重",
+                    IsIdempotent: true,
+                    IsParallelSafe: false,
+                    HasInverse: true,
+                    RequiresUserPresence: false,
+                    DefaultTimeoutSeconds: 60,
+                    TouchedResources: [],
+                    Parameters:
+                    [
+                        new EnvStation.Abstractions.Actions.ParameterSpec(
+                            "dry_run", EnvStation.Abstractions.Actions.ParameterType.Boolean, false, "预演"),
+                    ]),
+            };
+
+            var applier = new RemediationApplier(
+                (id, args, dry, granted, roots, _) =>
+                {
+                    var dryFlag = args is not null
+                        && args.TryGetValue("dry_run", out var v)
+                        && v is EnvStation.Abstractions.Packages.ScriptBoolean { Value: true };
+                    dryFlags.Add(dryFlag);
+                    Assert.True(granted.Contains(EnvStation.Abstractions.Actions.CapabilityIds.PathModify),
+                        "必须授予 PATH 修改能力。");
+                    return Task.FromResult(EnvStation.Abstractions.Actions.ActionResult.Ok(
+                        dryFlag ? "预演去重" : "已去重",
+                        new Dictionary<string, string>(StringComparer.Ordinal)
+                        {
+                            ["summary"] = dryFlag ? "将去重" : "已去重",
+                        }));
+                },
+                id => descriptors.TryGetValue(id, out var d) ? d : null);
+
+            var plan = RemediationPlan.Single(
+                RemedyStep.Of("envstation.path.dedupe", "去掉重复项", RemedyArgument.Of("scope", "user")),
+                "PATH 去重");
+
+            var outcome = applier.RunAsync(
+                plan,
+                RiskLevel.Reversible,
+                "PATH 去重",
+                "去掉重复目录",
+                (_, _) => Task.FromResult(true)).GetAwaiter().GetResult();
+
+            Assert.True(outcome.Succeeded, outcome.Message);
+            Assert.Equal(2, dryFlags.Count, "应先预演再执行。");
+            Assert.True(dryFlags[0], "第一次必须是 dry_run。");
+            Assert.False(dryFlags[1], "第二次必须真正执行。");
+        });
     }
 
     private static RemedyItem MakeRemedy(string id, RemedySeverity severity, RiskLevel risk) =>
