@@ -1,0 +1,49 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="EnvStation"
+    Manufacturer="EnvStation"
+    Version="$(Version)"
+    UpgradeCode="7c3a9e21-4b18-4d6f-9a40-e1f8c0d2b7a4"
+    Language="1033"
+    Scope="perMachine"
+    Compressed="yes">
+    <SummaryInformation Description="EnvStation desktop app" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." AllowSameVersionUpgrades="yes" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/bigxingyun/EnvStation" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/bigxingyun/EnvStation/issues" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <Icon Id="AppIcon" SourceFile="!(bindpath.app)\EnvStation.exe" />
+    <Property Id="ARPPRODUCTICON" Value="AppIcon" />
+
+    <Feature Id="Main" Title="EnvStation" Level="1">
+      <ComponentGroupRef Id="AppFiles" />
+      <ComponentRef Id="StartMenuShortcut" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="INSTALLFOLDER" Name="EnvStation" />
+    </StandardDirectory>
+
+    <StandardDirectory Id="ProgramMenuFolder">
+      <Directory Id="AppShortcutFolder" Name="EnvStation">
+        <Component Id="StartMenuShortcut" Guid="*">
+          <Shortcut
+            Id="AppShortcut"
+            Name="EnvStation"
+            Description="EnvStation"
+            Target="[INSTALLFOLDER]EnvStation.exe"
+            WorkingDirectory="INSTALLFOLDER" />
+          <RemoveFolder Id="AppShortcutFolder" On="uninstall" />
+          <RegistryValue Root="HKLM" Key="Software\EnvStation" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+        </Component>
+      </Directory>
+    </StandardDirectory>
+
+    <ComponentGroup Id="AppFiles" Directory="INSTALLFOLDER">
+      <Files Include="!(bindpath.app)\**" />
+    </ComponentGroup>
+  </Package>
+</Wix>

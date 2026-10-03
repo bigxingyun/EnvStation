@@ -1,0 +1,14 @@
+<Project Sdk="WixToolset.Sdk/5.0.2">
+  <PropertyGroup>
+    <OutputType>Package</OutputType>
+    <InstallerPlatform>x64</InstallerPlatform>
+    <OutputName>EnvStation-$(Version)-win-x64</OutputName>
+    <Version Condition="'$(Version)' == ''">0.0.1</Version>
+    <DefineConstants>Version=$(Version)</DefineConstants>
+    <SuppressIces>ICE03;ICE38;ICE43;ICE57;ICE61</SuppressIces>
+    <AppPublishDir Condition="'$(AppPublishDir)' == ''">$(MSBuildThisFileDirectory)..\..\artifacts\v$(Version)\app-win-x64</AppPublishDir>
+  </PropertyGroup>
+  <ItemGroup>
+    <BindPath Include="$(AppPublishDir)" BindName="app" />
+  </ItemGroup>
+</Project>

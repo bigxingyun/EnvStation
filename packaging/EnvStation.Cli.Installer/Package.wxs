@@ -1,0 +1,47 @@
+<Wix xmlns="http://wixtoolset.org/schemas/v4/wxs">
+  <Package
+    Name="EnvStation CLI"
+    Manufacturer="EnvStation"
+    Version="$(Version)"
+    UpgradeCode="7c3a9e21-4b18-4d6f-9a40-e1f8c0d2b7a5"
+    Language="1033"
+    Scope="perMachine"
+    Compressed="yes">
+    <SummaryInformation Description="EnvStation command line" />
+    <MajorUpgrade DowngradeErrorMessage="A newer version is already installed." AllowSameVersionUpgrades="yes" />
+    <MediaTemplate EmbedCab="yes" CompressionLevel="high" />
+
+    <Property Id="ARPURLINFOABOUT" Value="https://github.com/bigxingyun/EnvStation" />
+    <Property Id="ARPHELPLINK" Value="https://github.com/bigxingyun/EnvStation/issues" />
+    <Property Id="ARPNOMODIFY" Value="1" />
+
+    <Feature Id="Main" Title="EnvStation CLI" Level="1">
+      <ComponentGroupRef Id="CliFiles" />
+      <ComponentRef Id="CliPath" />
+    </Feature>
+
+    <StandardDirectory Id="ProgramFiles64Folder">
+      <Directory Id="CompanyFolder" Name="EnvStation">
+        <Directory Id="INSTALLFOLDER" Name="cli" />
+      </Directory>
+    </StandardDirectory>
+
+    <ComponentGroup Id="CliFiles" Directory="INSTALLFOLDER">
+      <Files Include="!(bindpath.cli)\**" />
+    </ComponentGroup>
+
+    <DirectoryRef Id="INSTALLFOLDER">
+      <Component Id="CliPath" Guid="*">
+        <Environment
+          Id="CliOnPath"
+          Name="PATH"
+          Value="[INSTALLFOLDER]"
+          Permanent="no"
+          Part="last"
+          Action="set"
+          System="yes" />
+        <RegistryValue Root="HKMU" Key="Software\EnvStation\Cli" Name="installed" Type="integer" Value="1" KeyPath="yes" />
+      </Component>
+    </DirectoryRef>
+  </Package>
+</Wix>

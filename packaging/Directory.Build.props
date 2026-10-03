@@ -1,0 +1,4 @@
+<Project>
+  <!-- Isolates WiX projects from repo-wide .NET Directory.Build.props. -->
+</Project>
+
