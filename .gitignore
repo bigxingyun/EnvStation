@@ -1,5 +1,7 @@
-# 开发过程文档与截图，不上传仓库
-/docs/
+# 开发过程文档不上传；README 用的界面截图单独放行
+/docs/*
+!/docs/screenshots/
+!/docs/screenshots/**
 
 # 构建产物与测量产物
 /bin/
